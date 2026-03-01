@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "suresend.fullname" . }}-web
+  labels:
+    {{- include "suresend.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  replicas: {{ .Values.web.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "suresend.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: web
+  template:
+    metadata:
+      labels:
+        {{- include "suresend.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: web
+      {{- with .Values.web.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: web
+          image: {{ include "suresend.web.image" . }}
+          imagePullPolicy: {{ .Values.web.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.web.service.port }}
+              protocol: TCP
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "suresend.fullname" . }}
+                  key: NEXT_PUBLIC_API_URL
+            - name: NEXT_PUBLIC_APP_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "suresend.fullname" . }}
+                  key: NEXT_PUBLIC_APP_NAME
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+      {{- with .Values.web.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.web.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.web.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

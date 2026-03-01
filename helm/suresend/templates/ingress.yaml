@@ -1,0 +1,46 @@
+{{- if .Values.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "suresend.fullname" . }}
+  labels:
+    {{- include "suresend.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if or .Values.ingress.web.tls .Values.ingress.api.tls }}
+  tls:
+    {{- with .Values.ingress.web.tls }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- with .Values.ingress.api.tls }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.web.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "suresend.fullname" . }}-web
+                port:
+                  number: {{ .Values.web.service.port }}
+    - host: {{ .Values.ingress.api.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "suresend.fullname" . }}-api
+                port:
+                  number: {{ .Values.api.service.port }}
+{{- end }}

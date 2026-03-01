@@ -1,0 +1,98 @@
+## Global
+nameOverride: ""
+fullnameOverride: ""
+
+imagePullSecrets: []
+
+## API (NestJS backend)
+api:
+  image:
+    # Will be auto-populated by CI: ghcr.io/<org>/<repo>/api
+    repository: ghcr.io/frobobbo/sps-suresend/api
+    tag: ""  # defaults to .Chart.AppVersion
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  service:
+    type: ClusterIP
+    port: 4000
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  env:
+    nodeEnv: production
+    port: "4000"
+    # Set to the public URL of the web frontend, used for CORS
+    corsOrigin: "https://suresend.example.com"
+
+  # Sensitive values — set via --set or a values override file, never commit real values
+  secrets:
+    jwtSecret: "replace-me"
+    databaseUrl: "postgresql://postgres:postgres@postgres:5432/suresend"
+    redisUrl: "redis://redis:6379"
+    stripeSecretKey: "sk_test_replace"
+
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+## Web (Next.js frontend)
+web:
+  image:
+    repository: ghcr.io/frobobbo/sps-suresend/web
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  service:
+    type: ClusterIP
+    port: 3000
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  env:
+    # Public URL of the API, accessible from the browser
+    apiUrl: "https://api.suresend.example.com"
+    appName: "StrategyPlus SureSend"
+
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+## Ingress
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    # nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+
+  web:
+    host: suresend.example.com
+    tls: []
+    # - secretName: suresend-web-tls
+    #   hosts:
+    #     - suresend.example.com
+
+  api:
+    host: api.suresend.example.com
+    tls: []
+    # - secretName: suresend-api-tls
+    #   hosts:
+    #     - api.suresend.example.com

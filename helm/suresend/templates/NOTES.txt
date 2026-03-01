@@ -1,0 +1,21 @@
+StrategyPlus SureSend has been deployed!
+
+Web:  http{{ if .Values.ingress.web.tls }}s{{ end }}://{{ .Values.ingress.web.host }}
+API:  http{{ if .Values.ingress.api.tls }}s{{ end }}://{{ .Values.ingress.api.host }}/api/health
+
+{{- if not .Values.ingress.enabled }}
+Ingress is disabled. To access the services, port-forward:
+
+  kubectl port-forward svc/{{ include "suresend.fullname" . }}-web 3000:{{ .Values.web.service.port }}
+  kubectl port-forward svc/{{ include "suresend.fullname" . }}-api 4000:{{ .Values.api.service.port }}
+{{- end }}
+
+NOTE: Ensure you have set real values for api.secrets before going to production:
+  - api.secrets.jwtSecret
+  - api.secrets.databaseUrl
+  - api.secrets.redisUrl
+  - api.secrets.stripeSecretKey
+
+To add this Helm repo:
+  helm repo add suresend https://frobobbo.github.io/sps-suresend
+  helm repo update

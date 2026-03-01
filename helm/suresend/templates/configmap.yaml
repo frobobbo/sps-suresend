@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "suresend.fullname" . }}
+  labels:
+    {{- include "suresend.labels" . | nindent 4 }}
+data:
+  # API
+  NODE_ENV: {{ .Values.api.env.nodeEnv | quote }}
+  PORT: {{ .Values.api.env.port | quote }}
+  CORS_ORIGIN: {{ .Values.api.env.corsOrigin | quote }}
+  # Web
+  NEXT_PUBLIC_API_URL: {{ .Values.web.env.apiUrl | quote }}
+  NEXT_PUBLIC_APP_NAME: {{ .Values.web.env.appName | quote }}

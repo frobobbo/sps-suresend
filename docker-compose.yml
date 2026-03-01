@@ -1,0 +1,60 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: suresend-web
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      NEXT_PUBLIC_APP_NAME: StrategyPlus SureSend
+    ports:
+      - '3000:3000'
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: suresend-api
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      CORS_ORIGIN: http://localhost:3000
+      JWT_SECRET: replace-me
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/suresend
+      REDIS_URL: redis://redis:6379
+      STRIPE_SECRET_KEY: sk_test_replace
+    ports:
+      - '4000:4000'
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  db:
+    image: postgres:16-alpine
+    container_name: suresend-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: suresend
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d suresend']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+
+  redis:
+    image: redis:7-alpine
+    container_name: suresend-redis
+    ports:
+      - '6379:6379'
+
+volumes:
+  postgres_data:
