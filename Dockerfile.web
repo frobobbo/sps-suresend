@@ -18,8 +18,9 @@ RUN pnpm install --frozen-lockfile
 COPY apps/web/app apps/web/app
 COPY apps/web/components apps/web/components
 COPY packages/shared/src packages/shared/src
-RUN pnpm --filter @suresend/shared build && \
-    pnpm --filter web build
+# next build compiles @suresend/shared inline via the tsconfig paths alias,
+# so no separate shared build step is needed.
+RUN pnpm --filter web build
 
 # ---- Run Stage ----
 FROM node:20-alpine AS runner
