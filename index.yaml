@@ -1,0 +1,25 @@
+apiVersion: v1
+entries:
+  suresend:
+  - apiVersion: v2
+    appVersion: 0.1.3
+    created: "2026-03-01T20:30:31.366871802Z"
+    description: StrategyPlus SureSend — email reputation monitoring platform
+    digest: 897fede038a4d7f0ccda8b535616afd3eea54fd5f050600b1289f5e9b8e7335e
+    home: https://github.com/frobobbo/sps-suresend
+    keywords:
+    - email
+    - reputation
+    - smtp
+    - dns
+    - monitoring
+    maintainers:
+    - name: StrategyPlus
+    name: suresend
+    sources:
+    - https://github.com/frobobbo/sps-suresend
+    type: application
+    urls:
+    - https://github.com/frobobbo/sps-suresend/releases/download/suresend-0.1.3/suresend-0.1.3.tgz
+    version: 0.1.3
+generated: "2026-03-01T20:30:31.366877909Z"
