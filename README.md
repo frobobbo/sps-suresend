@@ -11,7 +11,7 @@ StrategyPlus SureSend is a subscription-based platform for helping small busines
 - Billing: Stripe (stubbed integration points)
 - Containerization: Docker + Docker Compose
 - CI/CD: GitHub Actions → GitHub Container Registry (GHCR)
-- Kubernetes: Helm chart hosted via GitHub Pages
+- Kubernetes: Helm chart published to GHCR as an OCI artifact
 
 ## Quick Start
 
@@ -51,7 +51,7 @@ Two GitHub Actions workflows run on every push to `main`:
 | Workflow | Trigger | What it does |
 |---|---|---|
 | `docker-build.yml` | Push to `main` or `v*` tag | Builds and pushes `api` and `web` images to GHCR |
-| `helm-release.yml` | Push to `main` with changes in `helm/**` | Packages the Helm chart and publishes it to GitHub Pages |
+| `helm-release.yml` | Push to `main` with changes in `helm/**` | Packages the Helm chart and pushes it to GHCR as an OCI artifact |
 
 ### Container Images
 
@@ -66,17 +66,13 @@ Tags produced per build: `latest`, `main`, `sha-<short-sha>`, and semver tags on
 
 ## Helm
 
-### Add the Helm repository
-
-```bash
-helm repo add suresend https://frobobbo.github.io/sps-suresend
-helm repo update
-```
+The chart is distributed as an OCI artifact via GitHub Container Registry. No `helm repo add` needed.
 
 ### Install
 
 ```bash
-helm install my-suresend suresend/suresend \
+helm install my-suresend oci://ghcr.io/frobobbo/suresend \
+  --version 0.1.3 \
   --set api.secrets.jwtSecret=<secret> \
   --set api.secrets.databaseUrl=postgresql://user:pass@host:5432/suresend \
   --set api.secrets.redisUrl=redis://redis:6379 \
@@ -88,7 +84,9 @@ helm install my-suresend suresend/suresend \
 ### Upgrade
 
 ```bash
-helm upgrade my-suresend suresend/suresend --reuse-values \
+helm upgrade my-suresend oci://ghcr.io/frobobbo/suresend \
+  --version <new-version> \
+  --reuse-values \
   --set api.image.tag=<new-tag> \
   --set web.image.tag=<new-tag>
 ```
@@ -111,18 +109,12 @@ helm upgrade my-suresend suresend/suresend --reuse-values \
 | `api.secrets.redisUrl` | `redis://redis:6379` | Redis connection string |
 | `api.secrets.stripeSecretKey` | — | Stripe secret key |
 
-### One-time GitHub setup (Helm repo)
+### One-time GHCR setup
 
-The Helm repository is hosted on GitHub Pages from the `gh-pages` branch. To initialise it on a fresh clone:
+After the first workflow run, make the chart package public so it can be pulled without credentials:
 
-```bash
-git checkout --orphan gh-pages
-git commit --allow-empty -m "Initialize gh-pages"
-git push origin gh-pages
-git checkout main
-```
-
-Then enable GitHub Pages under **Settings → Pages → Source: `gh-pages` branch (root)**.
+1. Go to **https://github.com/users/frobobbo/packages/container/suresend/settings**
+2. Scroll to **Danger Zone → Change visibility → Public**
 
 ## Notes
 - Current implementation includes secure defaults, module stubs, and starter UI.
