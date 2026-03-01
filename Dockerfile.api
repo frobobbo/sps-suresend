@@ -1,19 +1,26 @@
-FROM node:20-alpine AS deps
-WORKDIR /app
-RUN corepack enable
-COPY package.json pnpm-workspace.yaml turbo.json tsconfig.base.json ./
-COPY apps/api/package.json apps/api/package.json
-COPY packages/shared/package.json packages/shared/package.json
-RUN pnpm install --filter api... --filter @suresend/shared... --frozen-lockfile=false
-
+# ---- Build Stage ----
 FROM node:20-alpine AS builder
 WORKDIR /app
 RUN corepack enable
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN pnpm --filter @suresend/shared build
-RUN pnpm --filter api build
 
+# Copy workspace manifests first for layer caching
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/api/tsconfig.json apps/api/tsconfig.json
+COPY apps/api/nest-cli.json apps/api/nest-cli.json
+COPY packages/shared/package.json packages/shared/package.json
+COPY packages/shared/tsconfig.json packages/shared/tsconfig.json
+
+# Install all workspace dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy source and build
+COPY apps/api/src apps/api/src
+COPY packages/shared/src packages/shared/src
+RUN pnpm --filter @suresend/shared build && \
+    pnpm --filter api build
+
+# ---- Run Stage ----
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
