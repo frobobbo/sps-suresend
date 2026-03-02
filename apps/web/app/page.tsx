@@ -118,6 +118,9 @@ export default function LandingPage() {
           }}
         />
         <div className="relative max-w-3xl mx-auto space-y-6">
+          <div className="flex justify-center mb-4">
+            <Image src="/logo.png" alt="SureSend" width={280} height={187} priority className="w-56 h-auto drop-shadow-xl" />
+          </div>
           <div
             className="inline-flex items-center gap-2 text-xs font-semibold px-3 py-1 rounded-full mb-2"
             style={{ background: 'rgba(0,160,224,0.15)', color: 'var(--sp-sky)' }}
