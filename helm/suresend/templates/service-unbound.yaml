@@ -1,0 +1,23 @@
+{{- if .Values.unbound.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "suresend.fullname" . }}-unbound
+  labels:
+    {{- include "suresend.labels" . | nindent 4 }}
+    app.kubernetes.io/component: unbound
+spec:
+  type: ClusterIP
+  ports:
+    - name: dns-udp
+      port: 53
+      protocol: UDP
+      targetPort: dns-udp
+    - name: dns-tcp
+      port: 53
+      protocol: TCP
+      targetPort: dns-tcp
+  selector:
+    {{- include "suresend.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: unbound
+{{- end }}

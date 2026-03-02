@@ -16,6 +16,16 @@ NOTE: Ensure you have set real values for api.secrets before going to production
   - api.secrets.redisUrl
   - api.secrets.stripeSecretKey
 
+{{- if .Values.unbound.enabled }}
+DNS: A local unbound recursive resolver is deployed ({{ include "suresend.fullname" . }}-unbound).
+     The reputation service will automatically use it for accurate RBL blacklist checks
+     by resolving the service name at startup (no manual IP configuration required).
+{{- else }}
+DNS: unbound is disabled (unbound.enabled=false). RBL blacklist checks may show false
+     positives if the cluster uses a public upstream resolver (e.g. 8.8.8.8).
+     Enable with: --set unbound.enabled=true
+{{- end }}
+
 To add this Helm repo:
   helm repo add suresend https://frobobbo.github.io/sps-suresend
   helm repo update

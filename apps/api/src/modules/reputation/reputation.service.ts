@@ -1,6 +1,6 @@
-import { promises as dns } from 'dns';
+import { promises as dnsPromises } from 'dns';
 import * as https from 'https';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ReputationCheck } from './reputation-check.entity';
@@ -17,6 +17,14 @@ const RBLS = [
 // not that the IP is actually listed. Spamhaus (and others) return these
 // when queries arrive through public resolvers like 8.8.8.8 or 1.1.1.1.
 const BLOCKED_RESOLVER_CODES = new Set(['127.255.255.254', '127.255.255.255']);
+
+// Minimal interface satisfied by both the global dns.promises module and a
+// per-instance dns.promises.Resolver (which supports custom nameserver config).
+interface DnsClient {
+  resolve4(hostname: string): Promise<string[]>;
+  resolveMx(hostname: string): Promise<{ exchange: string; priority: number }[]>;
+  resolveTxt(hostname: string): Promise<string[][]>;
+}
 
 interface BlacklistResult {
   list: string;
@@ -35,11 +43,46 @@ interface CheckDetails {
 }
 
 @Injectable()
-export class ReputationService {
+export class ReputationService implements OnModuleInit {
+  private readonly logger = new Logger(ReputationService.name);
+
+  // Default: global dns.promises (system resolver).
+  // Replaced in onModuleInit when DNS_RESOLVER_IP or DNS_RESOLVER_HOST is set.
+  private dnsClient: DnsClient = dnsPromises as unknown as DnsClient;
+
   constructor(
     @InjectRepository(ReputationCheck)
     private readonly repo: Repository<ReputationCheck>,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    // DNS_RESOLVER_IP  — direct IP (Docker Compose: fixed IP of unbound container)
+    // DNS_RESOLVER_HOST — hostname resolved via system DNS (Kubernetes: K8s service name)
+    let resolverIp = process.env.DNS_RESOLVER_IP ?? null;
+
+    if (!resolverIp && process.env.DNS_RESOLVER_HOST) {
+      try {
+        const { address } = await dnsPromises.lookup(process.env.DNS_RESOLVER_HOST);
+        resolverIp = address;
+      } catch (err) {
+        this.logger.warn(
+          `Could not resolve DNS_RESOLVER_HOST "${process.env.DNS_RESOLVER_HOST}": ${String(err)}. Falling back to system resolver.`,
+        );
+      }
+    }
+
+    if (resolverIp) {
+      const resolver = new dnsPromises.Resolver();
+      resolver.setServers([`${resolverIp}:53`]);
+      this.dnsClient = resolver as unknown as DnsClient;
+      const label = process.env.DNS_RESOLVER_HOST ? ` (${process.env.DNS_RESOLVER_HOST})` : '';
+      this.logger.log(`Reputation DNS resolver: ${resolverIp}${label}`);
+    } else {
+      this.logger.log(
+        'Reputation DNS resolver: system default — set DNS_RESOLVER_IP or DNS_RESOLVER_HOST for accurate RBL checks',
+      );
+    }
+  }
 
   async runCheck(domainId: string, domainName: string): Promise<ReputationCheck> {
     const details = await this.gatherDetails(domainName);
@@ -70,7 +113,7 @@ export class ReputationService {
 
   private async checkMx(domain: string) {
     try {
-      const records = await dns.resolveMx(domain);
+      const records = await this.dnsClient.resolveMx(domain);
       const exchanges = records.map((r) => r.exchange);
       return { pass: exchanges.length > 0, records: exchanges };
     } catch {
@@ -80,7 +123,7 @@ export class ReputationService {
 
   private async checkSpf(domain: string) {
     try {
-      const txt = await dns.resolveTxt(domain);
+      const txt = await this.dnsClient.resolveTxt(domain);
       const flat = txt.map((r) => r.join(''));
       const record = flat.find((r) => r.startsWith('v=spf1')) ?? null;
       return { pass: record !== null, record };
@@ -91,7 +134,7 @@ export class ReputationService {
 
   private async checkDmarc(domain: string) {
     try {
-      const txt = await dns.resolveTxt(`_dmarc.${domain}`);
+      const txt = await this.dnsClient.resolveTxt(`_dmarc.${domain}`);
       const flat = txt.map((r) => r.join(''));
       const record = flat.find((r) => r.startsWith('v=DMARC1')) ?? null;
       return { pass: record !== null, record };
@@ -103,7 +146,7 @@ export class ReputationService {
   private async checkDkim(domain: string) {
     for (const selector of DKIM_SELECTORS) {
       try {
-        const txt = await dns.resolveTxt(`${selector}._domainkey.${domain}`);
+        const txt = await this.dnsClient.resolveTxt(`${selector}._domainkey.${domain}`);
         if (txt.length > 0) return { pass: true, selector };
       } catch {
         // not found, try next selector
@@ -126,7 +169,7 @@ export class ReputationService {
   private async checkBlacklists(domain: string): Promise<BlacklistResult[]> {
     let ip: string;
     try {
-      const addresses = await dns.resolve4(domain);
+      const addresses = await this.dnsClient.resolve4(domain);
       if (!addresses.length) return RBLS.map((list) => ({ list, listed: false }));
       ip = addresses[0];
     } catch {
@@ -137,7 +180,7 @@ export class ReputationService {
     return Promise.all(
       RBLS.map(async (list) => {
         try {
-          const results = await dns.resolve4(`${reversed}.${list}`);
+          const results = await this.dnsClient.resolve4(`${reversed}.${list}`);
           const returnCode = results[0];
           // Spamhaus and some other RBLs return 127.255.255.254 / 127.255.255.255
           // when the query comes from a public resolver (e.g. 8.8.8.8, 1.1.1.1).

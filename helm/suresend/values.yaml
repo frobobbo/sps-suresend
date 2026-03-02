@@ -102,6 +102,25 @@ ingress:
     #   hosts:
     #     - api.suresend.example.com
 
+## Unbound recursive DNS resolver
+# Used by the API's reputation service for accurate RBL blacklist checks.
+# When enabled, a per-instance dns.Resolver in the reputation service is
+# configured to route all DNS lookups through unbound instead of the
+# cluster's public-forwarding resolver (CoreDNS → 8.8.8.8).
+unbound:
+  enabled: true
+  image:
+    repository: mvance/unbound
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 50m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
 ## PostgreSQL (Bitnami subchart)
 # Set enabled: false to use an external database and provide api.secrets.databaseUrl instead.
 postgresql:

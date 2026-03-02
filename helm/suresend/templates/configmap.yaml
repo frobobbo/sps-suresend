@@ -11,3 +11,8 @@ data:
   CORS_ORIGIN: {{ .Values.api.env.corsOrigin | quote }}
   # Web — server-side URL used by the Next.js proxy to reach the API
   API_INTERNAL_URL: {{ .Values.web.env.apiInternalUrl | default (printf "http://%s-api:%s" (include "suresend.fullname" .) (.Values.api.env.port)) | quote }}
+  {{- if .Values.unbound.enabled }}
+  # Reputation service resolves this K8s service name at startup to configure
+  # a local recursive resolver, bypassing public DNS resolver blocking by RBLs.
+  DNS_RESOLVER_HOST: {{ printf "%s-unbound" (include "suresend.fullname" .) | quote }}
+  {{- end }}

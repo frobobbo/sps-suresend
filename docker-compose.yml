@@ -1,4 +1,14 @@
 services:
+  unbound:
+    image: mvance/unbound:latest
+    container_name: suresend-unbound
+    volumes:
+      - ./config/unbound.conf:/opt/unbound/etc/unbound/unbound.conf:ro
+    networks:
+      suresend:
+        ipv4_address: 172.28.0.53
+    restart: unless-stopped
+
   web:
     build:
       context: .
@@ -13,12 +23,19 @@ services:
       - '3000:3000'
     depends_on:
       - api
+    networks:
+      - suresend
 
   api:
     build:
       context: .
       dockerfile: Dockerfile.api
     container_name: suresend-api
+    # Route all external DNS queries through the local unbound recursive resolver.
+    # Docker's embedded DNS (127.0.0.11) still handles container name resolution
+    # (db, redis, etc.) and forwards external queries to unbound.
+    dns:
+      - 172.28.0.53
     environment:
       NODE_ENV: production
       PORT: 4000
@@ -30,6 +47,9 @@ services:
       # Optional: seed a default admin user on first startup
       SEED_ADMIN_EMAIL: admin@example.com
       SEED_ADMIN_PASSWORD: change-me-please
+      # Reputation service will use this resolver for all DNS checks.
+      # Matches the fixed IP assigned to the unbound container above.
+      DNS_RESOLVER_IP: 172.28.0.53
     ports:
       - '4000:4000'
     depends_on:
@@ -37,6 +57,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      unbound:
+        condition: service_started
+    networks:
+      - suresend
 
   db:
     image: postgres:16-alpine
@@ -54,12 +78,23 @@ services:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - '5432:5432'
+    networks:
+      - suresend
 
   redis:
     image: redis:7-alpine
     container_name: suresend-redis
     ports:
       - '6379:6379'
+    networks:
+      - suresend
+
+networks:
+  suresend:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
 
 volumes:
   postgres_data:

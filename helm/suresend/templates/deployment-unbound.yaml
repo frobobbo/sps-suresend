@@ -1,0 +1,55 @@
+{{- if .Values.unbound.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "suresend.fullname" . }}-unbound
+  labels:
+    {{- include "suresend.labels" . | nindent 4 }}
+    app.kubernetes.io/component: unbound
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "suresend.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: unbound
+  template:
+    metadata:
+      labels:
+        {{- include "suresend.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: unbound
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: unbound
+          image: {{ .Values.unbound.image.repository }}:{{ .Values.unbound.image.tag }}
+          imagePullPolicy: {{ .Values.unbound.image.pullPolicy }}
+          ports:
+            - name: dns-udp
+              containerPort: 53
+              protocol: UDP
+            - name: dns-tcp
+              containerPort: 53
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /opt/unbound/etc/unbound/unbound.conf
+              subPath: unbound.conf
+              readOnly: true
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - 'drill @127.0.0.1 . NS > /dev/null 2>&1 || exit 1'
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.unbound.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "suresend.fullname" . }}-unbound
+{{- end }}
