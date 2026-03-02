@@ -28,8 +28,6 @@ data:
         access-control: 172.16.0.0/12 allow
         access-control: 192.168.0.0/16 allow
 
-        root-hints: "/root.hints"
-
         hide-identity: yes
         hide-version: yes
         harden-glue: yes
