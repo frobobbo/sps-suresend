@@ -196,11 +196,34 @@ git push origin v0.2.0
 
 The chart is distributed as an OCI artifact via GitHub Container Registry. No `helm repo add` needed.
 
-### Install
+### PostgreSQL
+
+The chart includes an optional Bitnami PostgreSQL subchart (`postgresql.enabled: true` by default). When enabled:
+- A PostgreSQL StatefulSet + PVC is deployed alongside the API
+- `DATABASE_URL` is auto-constructed from the subchart credentials — `api.secrets.databaseUrl` is ignored
+- An init container on the API pod waits for PostgreSQL to be ready before starting
+
+To use an external database instead (RDS, CloudSQL, etc.), set `postgresql.enabled=false` and provide `api.secrets.databaseUrl`.
+
+### Install (with bundled PostgreSQL)
 
 ```bash
 helm install my-suresend oci://ghcr.io/frobobbo/suresend \
-  --version 0.1.3 \
+  --version 0.2.0 \
+  --set api.secrets.jwtSecret=<secret> \
+  --set postgresql.auth.password=<strong-password> \
+  --set api.secrets.redisUrl=redis://redis:6379 \
+  --set api.secrets.stripeSecretKey=sk_live_... \
+  --set ingress.web.host=suresend.example.com \
+  --set ingress.api.host=api.suresend.example.com
+```
+
+### Install (external database)
+
+```bash
+helm install my-suresend oci://ghcr.io/frobobbo/suresend \
+  --version 0.2.0 \
+  --set postgresql.enabled=false \
   --set api.secrets.jwtSecret=<secret> \
   --set api.secrets.databaseUrl=postgresql://user:pass@host:5432/suresend \
   --set api.secrets.redisUrl=redis://redis:6379 \
@@ -233,9 +256,14 @@ helm upgrade my-suresend oci://ghcr.io/frobobbo/suresend \
 | `ingress.web.host` | `suresend.example.com` | Web hostname |
 | `ingress.api.host` | `api.suresend.example.com` | API hostname |
 | `api.secrets.jwtSecret` | `replace-me` | JWT signing secret |
-| `api.secrets.databaseUrl` | — | PostgreSQL connection string |
+| `api.secrets.databaseUrl` | — | Required only when `postgresql.enabled=false` |
 | `api.secrets.redisUrl` | `redis://redis:6379` | Redis connection string |
 | `api.secrets.stripeSecretKey` | — | Stripe secret key |
+| `postgresql.enabled` | `true` | Deploy bundled PostgreSQL subchart |
+| `postgresql.auth.username` | `suresend` | PostgreSQL username |
+| `postgresql.auth.password` | `suresend-change-me` | PostgreSQL password — **always override** |
+| `postgresql.auth.database` | `suresend` | PostgreSQL database name |
+| `postgresql.primary.persistence.size` | `8Gi` | PVC size for PostgreSQL data |
 
 ### One-time GHCR setup
 

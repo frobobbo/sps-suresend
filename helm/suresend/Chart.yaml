@@ -2,8 +2,8 @@ apiVersion: v2
 name: suresend
 description: StrategyPlus SureSend — email reputation monitoring platform
 type: application
-version: 0.1.3
-appVersion: "0.1.3"
+version: 0.2.0
+appVersion: "0.2.0"
 keywords:
   - email
   - reputation
@@ -15,3 +15,8 @@ sources:
   - https://github.com/frobobbo/sps-suresend
 maintainers:
   - name: StrategyPlus
+dependencies:
+  - name: postgresql
+    version: ">=15.0.0"
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: postgresql.enabled

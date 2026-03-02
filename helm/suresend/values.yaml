@@ -7,7 +7,6 @@ imagePullSecrets: []
 ## API (NestJS backend)
 api:
   image:
-    # Will be auto-populated by CI: ghcr.io/<org>/<repo>/api
     repository: ghcr.io/frobobbo/sps-suresend/api
     tag: ""  # defaults to .Chart.AppVersion
     pullPolicy: IfNotPresent
@@ -32,10 +31,11 @@ api:
     # Set to the public URL of the web frontend, used for CORS
     corsOrigin: "https://suresend.example.com"
 
-  # Sensitive values — set via --set or a values override file, never commit real values
+  # Sensitive values — set via --set or a values override file, never commit real values.
+  # databaseUrl is ignored when postgresql.enabled is true (auto-constructed from subchart).
   secrets:
     jwtSecret: "replace-me"
-    databaseUrl: "postgresql://postgres:postgres@postgres:5432/suresend"
+    databaseUrl: ""
     redisUrl: "redis://redis:6379"
     stripeSecretKey: "sk_test_replace"
 
@@ -96,3 +96,17 @@ ingress:
     # - secretName: suresend-api-tls
     #   hosts:
     #     - api.suresend.example.com
+
+## PostgreSQL (Bitnami subchart)
+# Set enabled: false to use an external database and provide api.secrets.databaseUrl instead.
+postgresql:
+  enabled: true
+  auth:
+    username: suresend
+    # Set a strong password — never leave this as the default in production
+    password: "suresend-change-me"
+    database: suresend
+  primary:
+    persistence:
+      enabled: true
+      size: 8Gi
