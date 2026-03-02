@@ -10,25 +10,25 @@ import { Domain } from '../domains/domain.entity';
 @Entity('reputation_checks')
 export class ReputationCheck {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @ManyToOne(() => Domain, (domain) => domain.reputationChecks, {
     onDelete: 'CASCADE',
   })
-  domain: Domain;
+  domain!: Domain;
 
   @Column()
-  domainId: string;
+  domainId!: string;
 
   @Column({ type: 'int' })
-  score: number;
+  score!: number;
 
   @Column({ type: 'varchar' })
-  status: 'clean' | 'warning' | 'blacklisted';
+  status!: 'clean' | 'warning' | 'blacklisted';
 
   @Column({ type: 'jsonb' })
-  details: Record<string, unknown>;
+  details!: Record<string, unknown>;
 
   @CreateDateColumn()
-  checkedAt: Date;
+  checkedAt!: Date;
 }

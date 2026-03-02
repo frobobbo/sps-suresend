@@ -12,26 +12,26 @@ import { DomainAccess } from '../domains/domain-access.entity';
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ unique: true })
-  email: string;
+  email!: string;
 
   @Column()
-  password: string;
+  password!: string;
 
   @Column({ type: 'varchar', default: 'user' })
-  role: 'admin' | 'user';
+  role!: 'admin' | 'user';
 
   @OneToMany(() => Domain, (domain) => domain.owner)
-  domains: Domain[];
+  domains!: Domain[];
 
   @OneToMany(() => DomainAccess, (access) => access.user)
-  delegatedAccess: DomainAccess[];
+  delegatedAccess!: DomainAccess[];
 
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date;
+  updatedAt!: Date;
 }

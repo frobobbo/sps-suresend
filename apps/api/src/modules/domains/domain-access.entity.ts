@@ -13,22 +13,22 @@ import { Domain } from './domain.entity';
 @Unique(['domainId', 'userId'])
 export class DomainAccess {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @ManyToOne(() => Domain, (domain) => domain.delegatedAccess, {
     onDelete: 'CASCADE',
   })
-  domain: Domain;
+  domain!: Domain;
 
   @Column()
-  domainId: string;
+  domainId!: string;
 
   @ManyToOne(() => User, (user) => user.delegatedAccess)
-  user: User;
+  user!: User;
 
   @Column()
-  userId: string;
+  userId!: string;
 
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt!: Date;
 }

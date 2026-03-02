@@ -14,26 +14,26 @@ import { ReputationCheck } from '../reputation/reputation-check.entity';
 @Entity('domains')
 export class Domain {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ unique: true })
-  name: string;
+  name!: string;
 
   @ManyToOne(() => User, (user) => user.domains, { eager: false })
-  owner: User;
+  owner!: User;
 
   @Column()
-  ownerId: string;
+  ownerId!: string;
 
   @OneToMany(() => DomainAccess, (access) => access.domain, { cascade: true })
-  delegatedAccess: DomainAccess[];
+  delegatedAccess!: DomainAccess[];
 
   @OneToMany(() => ReputationCheck, (check) => check.domain, { cascade: true })
-  reputationChecks: ReputationCheck[];
+  reputationChecks!: ReputationCheck[];
 
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date;
+  updatedAt!: Date;
 }
