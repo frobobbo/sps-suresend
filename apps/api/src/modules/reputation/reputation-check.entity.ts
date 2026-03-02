@@ -27,7 +27,7 @@ export class ReputationCheck {
   status!: 'clean' | 'warning' | 'blacklisted';
 
   @Column({ type: 'jsonb' })
-  details!: Record<string, unknown>;
+  details!: unknown;
 
   @CreateDateColumn()
   checkedAt!: Date;

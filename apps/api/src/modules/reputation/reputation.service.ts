@@ -32,8 +32,8 @@ export class ReputationService {
   async runCheck(domainId: string, domainName: string): Promise<ReputationCheck> {
     const details = await this.gatherDetails(domainName);
     const { score, status } = this.score(details);
-    const check = this.repo.create({ domainId, score, status, details });
-    return this.repo.save(check);
+    const check = this.repo.create({ domainId, score, status, details: details as unknown });
+    return this.repo.save(check) as Promise<ReputationCheck>;
   }
 
   findForDomain(domainId: string): Promise<ReputationCheck[]> {

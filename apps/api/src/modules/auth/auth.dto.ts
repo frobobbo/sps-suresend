@@ -2,28 +2,28 @@ import { IsEmail, IsEnum, IsOptional, IsString, MinLength } from 'class-validato
 
 export class RegisterDto {
   @IsEmail()
-  email: string;
+  email!: string;
 
   @IsString()
   @MinLength(8)
-  password: string;
+  password!: string;
 }
 
 export class LoginDto {
   @IsEmail()
-  email: string;
+  email!: string;
 
   @IsString()
-  password: string;
+  password!: string;
 }
 
 export class CreateUserDto {
   @IsEmail()
-  email: string;
+  email!: string;
 
   @IsString()
   @MinLength(8)
-  password: string;
+  password!: string;
 
   @IsEnum(['admin', 'user'])
   @IsOptional()
@@ -32,5 +32,5 @@ export class CreateUserDto {
 
 export class UpdateUserRoleDto {
   @IsEnum(['admin', 'user'])
-  role: 'admin' | 'user';
+  role!: 'admin' | 'user';
 }
