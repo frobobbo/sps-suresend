@@ -18,6 +18,10 @@ RUN pnpm install --frozen-lockfile
 COPY apps/web/next-env.d.ts apps/web/next-env.d.ts
 COPY apps/web/app apps/web/app
 COPY apps/web/components apps/web/components
+COPY apps/web/lib apps/web/lib
+COPY apps/web/hooks apps/web/hooks
+COPY apps/web/middleware.ts apps/web/middleware.ts
+COPY apps/web/postcss.config.mjs apps/web/postcss.config.mjs
 COPY packages/shared/src packages/shared/src
 # Ensure public dir exists (Next.js requires it even if empty)
 RUN mkdir -p apps/web/public

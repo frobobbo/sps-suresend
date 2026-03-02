@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { AuthProvider } from '@/hooks/use-auth';
+import { Nav } from '@/components/nav';
 
 export const metadata: Metadata = {
   title: 'StrategyPlus SureSend',
@@ -9,7 +11,14 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AuthProvider>
+          <div className="flex min-h-screen">
+            <Nav />
+            <main className="flex-1 bg-[var(--sp-ice)]">{children}</main>
+          </div>
+        </AuthProvider>
+      </body>
     </html>
   );
 }
