@@ -8,16 +8,78 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Separator } from '@/components/ui/separator';
-import { AlertCircle, CheckCircle2, Loader2, RefreshCw, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ExternalLink, Loader2, RefreshCw, XCircle } from 'lucide-react';
 
-function Check({ pass, label }: { pass: boolean; label: string }) {
+// Documentation links for each check
+const DOCS: Record<string, string> = {
+  mx: 'https://www.cloudflare.com/learning/dns/dns-records/dns-mx-record/',
+  spf: 'https://www.cloudflare.com/learning/email-security/dmarc-dkim-spf/',
+  dmarc: 'https://dmarc.org/overview/',
+  dkim: 'https://www.cloudflare.com/learning/dns/dns-records/dns-dkim-record/',
+  https: 'https://web.dev/articles/why-https-matters',
+  httpsRedirect: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Redirections',
+  ssl: 'https://www.ssl.com/article/what-is-an-ssl-tls-certificate/',
+  hsts: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security',
+  xContentType: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options',
+  xFrame: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options',
+  mtaSts: 'https://datatracker.ietf.org/doc/html/rfc8461',
+  tlsRpt: 'https://datatracker.ietf.org/doc/html/rfc8460',
+  bimi: 'https://bimigroup.org/',
+  caa: 'https://www.cloudflare.com/learning/ssl/what-is-a-caa-record/',
+  ns: 'https://www.cloudflare.com/learning/dns/glossary/dns-nameserver/',
+  ptr: 'https://www.cloudflare.com/learning/dns/dns-records/dns-ptr-record/',
+  rbl: 'https://www.spamhaus.org/zen/',
+  dbl: 'https://www.spamhaus.org/dbl/',
+};
+
+type CheckState = 'pass' | 'fail' | 'warn';
+
+function Check({
+  state,
+  label,
+  href,
+}: {
+  state: CheckState;
+  label: string;
+  href?: string;
+}) {
+  const icon =
+    state === 'pass' ? (
+      <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
+    ) : state === 'warn' ? (
+      <AlertCircle size={15} className="text-amber-400 shrink-0" />
+    ) : (
+      <XCircle size={15} className="text-red-400 shrink-0" />
+    );
+
+  const textClass =
+    state === 'pass' ? 'text-slate-700' : state === 'warn' ? 'text-amber-700' : 'text-slate-500';
+
   return (
     <div className="flex items-center gap-2 text-sm">
-      {pass
-        ? <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
-        : <XCircle size={16} className="text-red-400 shrink-0" />}
-      <span className={pass ? 'text-slate-700' : 'text-slate-500'}>{label}</span>
+      {icon}
+      {href ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`flex items-center gap-1 hover:underline underline-offset-2 ${textClass}`}
+        >
+          {label}
+          <ExternalLink size={11} className="shrink-0 opacity-50" />
+        </a>
+      ) : (
+        <span className={textClass}>{label}</span>
+      )}
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">{title}</p>
+      <div className="space-y-1.5">{children}</div>
     </div>
   );
 }
@@ -25,9 +87,9 @@ function Check({ pass, label }: { pass: boolean; label: string }) {
 function ScoreGauge({ score, status }: { score: number; status: string }) {
   const color = status === 'clean' ? '#10b981' : status === 'warning' ? '#f59e0b' : '#ef4444';
   return (
-    <div className="flex flex-col items-center gap-1">
+    <div className="flex flex-col items-center gap-1.5 min-w-[80px]">
       <div
-        className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold text-white"
+        className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow"
         style={{ background: color }}
       >
         {score}
@@ -45,6 +107,52 @@ function ScoreGauge({ score, status }: { score: number; status: string }) {
       </Badge>
     </div>
   );
+}
+
+function spfLabel(spf: ReputationCheck['details']['spf']): string {
+  if (!spf.pass) return 'SPF Record';
+  const policyLabel: Record<string, string> = {
+    hard_fail: '-all (strict)',
+    soft_fail: '~all (soft fail)',
+    pass_all: '+all (unsafe)',
+    permissive: 'no all mechanism',
+  };
+  return `SPF — ${spf.policy ? policyLabel[spf.policy] ?? spf.policy : 'found'}`;
+}
+
+function spfState(spf: ReputationCheck['details']['spf']): CheckState {
+  if (!spf.pass) return 'fail';
+  if (spf.policy === 'soft_fail' || spf.policy === 'permissive' || spf.policy === 'pass_all') return 'warn';
+  return 'pass';
+}
+
+function dmarcLabel(dmarc: ReputationCheck['details']['dmarc']): string {
+  if (!dmarc.pass) return 'DMARC Record';
+  const parts: string[] = [];
+  if (dmarc.policy) parts.push(`p=${dmarc.policy}`);
+  if (dmarc.hasRua === false) parts.push('no rua');
+  return `DMARC${parts.length ? ` — ${parts.join(', ')}` : ''}`;
+}
+
+function dmarcState(dmarc: ReputationCheck['details']['dmarc']): CheckState {
+  if (!dmarc.pass) return 'fail';
+  if (dmarc.policy === 'none') return 'warn';
+  if (dmarc.policy === 'quarantine' || dmarc.hasRua === false) return 'warn';
+  return 'pass';
+}
+
+function sslLabel(ssl: NonNullable<ReputationCheck['details']['ssl']>): string {
+  if (!ssl.pass) return 'SSL Certificate (expired or invalid)';
+  if (ssl.daysUntilExpiry === null) return 'SSL Certificate';
+  if (ssl.daysUntilExpiry < 14) return `SSL Certificate (expires in ${ssl.daysUntilExpiry}d — renew now)`;
+  if (ssl.daysUntilExpiry < 30) return `SSL Certificate (expires in ${ssl.daysUntilExpiry}d)`;
+  return `SSL Certificate (${ssl.daysUntilExpiry}d remaining)`;
+}
+
+function sslState(ssl: NonNullable<ReputationCheck['details']['ssl']>): CheckState {
+  if (!ssl.pass) return 'fail';
+  if (ssl.daysUntilExpiry !== null && ssl.daysUntilExpiry < 30) return 'warn';
+  return 'pass';
 }
 
 export default function DomainDetailPage() {
@@ -78,6 +186,7 @@ export default function DomainDetailPage() {
   if (isLoading || !user || !domain) return null;
 
   const latest = checks[0];
+  const d = latest?.details;
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
@@ -89,12 +198,16 @@ export default function DomainDetailPage() {
           </p>
         </div>
         <Button onClick={handleRunCheck} disabled={running}>
-          {running ? <Loader2 size={16} className="mr-2 animate-spin" /> : <RefreshCw size={16} className="mr-2" />}
+          {running ? (
+            <Loader2 size={16} className="mr-2 animate-spin" />
+          ) : (
+            <RefreshCw size={16} className="mr-2" />
+          )}
           Run Check
         </Button>
       </div>
 
-      {latest && (
+      {latest && d && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center justify-between">
@@ -107,29 +220,158 @@ export default function DomainDetailPage() {
           <CardContent>
             <div className="flex gap-8 items-start">
               <ScoreGauge score={latest.score} status={latest.status} />
-              <div className="flex-1 space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <Check pass={latest.details.mx.pass} label={`MX Records ${latest.details.mx.records.length > 0 ? `(${latest.details.mx.records[0]})` : ''}`} />
-                  <Check pass={latest.details.spf.pass} label="SPF Record" />
-                  <Check pass={latest.details.dmarc.pass} label="DMARC Record" />
-                  <Check pass={latest.details.dkim.pass} label={`DKIM ${latest.details.dkim.selector ? `(${latest.details.dkim.selector})` : ''}`} />
-                  <Check pass={latest.details.https.pass} label={`HTTPS ${latest.details.https.statusCode ? `(${latest.details.https.statusCode})` : ''}`} />
-                </div>
-                <Separator />
-                <div>
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Blacklist Status</p>
-                  <div className="grid grid-cols-2 gap-1">
-                    {latest.details.blacklists.map((bl) => (
-                      bl.blocked ? (
-                        <div key={bl.list} className="flex items-center gap-2 text-sm" title="Unable to verify — public DNS resolver blocked by this RBL">
-                          <AlertCircle size={16} className="text-amber-400 shrink-0" />
-                          <span className="text-slate-400">{bl.list} (unverifiable)</span>
-                        </div>
-                      ) : (
-                        <Check key={bl.list} pass={!bl.listed} label={bl.list} />
-                      )
-                    ))}
-                  </div>
+
+              <div className="flex-1 grid grid-cols-2 gap-x-8 gap-y-5">
+                {/* Email Authentication */}
+                <Section title="Email Authentication">
+                  <Check
+                    state={d.mx.pass ? 'pass' : 'fail'}
+                    label={`MX Records${d.mx.records[0] ? ` (${d.mx.records[0]})` : ''}`}
+                    href={DOCS.mx}
+                  />
+                  <Check state={spfState(d.spf)} label={spfLabel(d.spf)} href={DOCS.spf} />
+                  <Check state={dmarcState(d.dmarc)} label={dmarcLabel(d.dmarc)} href={DOCS.dmarc} />
+                  <Check
+                    state={d.dkim.pass ? 'pass' : 'fail'}
+                    label={`DKIM${d.dkim.selector ? ` (${d.dkim.selector})` : ''}`}
+                    href={DOCS.dkim}
+                  />
+                </Section>
+
+                {/* Web Security */}
+                <Section title="Web Security">
+                  <Check
+                    state={d.https.pass ? 'pass' : 'fail'}
+                    label={`HTTPS${d.https.statusCode ? ` (${d.https.statusCode})` : ''}`}
+                    href={DOCS.https}
+                  />
+                  {d.httpsRedirect && (
+                    <Check
+                      state={d.httpsRedirect.pass ? 'pass' : 'fail'}
+                      label="HTTP→HTTPS Redirect"
+                      href={DOCS.httpsRedirect}
+                    />
+                  )}
+                  {d.ssl && (
+                    <Check state={sslState(d.ssl)} label={sslLabel(d.ssl)} href={DOCS.ssl} />
+                  )}
+                  {d.securityHeaders && (
+                    <>
+                      <Check
+                        state={d.securityHeaders.hsts ? 'pass' : 'fail'}
+                        label="HSTS"
+                        href={DOCS.hsts}
+                      />
+                      <Check
+                        state={d.securityHeaders.xContentTypeOptions ? 'pass' : 'fail'}
+                        label="X-Content-Type-Options"
+                        href={DOCS.xContentType}
+                      />
+                      <Check
+                        state={d.securityHeaders.xFrameOptions ? 'pass' : 'fail'}
+                        label="X-Frame-Options"
+                        href={DOCS.xFrame}
+                      />
+                    </>
+                  )}
+                </Section>
+
+                {/* Email Transport Security */}
+                <Section title="Email Transport Security">
+                  {d.mtaSts && (
+                    <Check
+                      state={d.mtaSts.pass ? 'pass' : 'fail'}
+                      label={`MTA-STS${d.mtaSts.policy ? ` (${d.mtaSts.policy})` : ''}`}
+                      href={DOCS.mtaSts}
+                    />
+                  )}
+                  {d.tlsRpt && (
+                    <Check
+                      state={d.tlsRpt.pass ? 'pass' : 'fail'}
+                      label="TLS Reporting (TLS-RPT)"
+                      href={DOCS.tlsRpt}
+                    />
+                  )}
+                  {d.bimi && (
+                    <Check
+                      state={d.bimi.pass ? 'pass' : 'fail'}
+                      label="BIMI (Brand Logo in Email)"
+                      href={DOCS.bimi}
+                    />
+                  )}
+                  {!d.mtaSts && !d.tlsRpt && !d.bimi && (
+                    <span className="text-xs text-slate-400 italic">Not checked</span>
+                  )}
+                </Section>
+
+                {/* DNS Health */}
+                <Section title="DNS Health">
+                  {d.nsCount && (
+                    <Check
+                      state={d.nsCount.pass ? 'pass' : 'fail'}
+                      label={`Nameservers (${d.nsCount.count} found, need ≥2)`}
+                      href={DOCS.ns}
+                    />
+                  )}
+                  {d.caa && (
+                    <Check
+                      state={d.caa.pass ? 'pass' : 'fail'}
+                      label={`CAA Records${d.caa.records[0] ? ` (${d.caa.records[0]})` : ''}`}
+                      href={DOCS.caa}
+                    />
+                  )}
+                  {d.ptr && (
+                    <Check
+                      state={d.ptr.pass ? 'pass' : 'fail'}
+                      label={`PTR / rDNS${d.ptr.hostname ? ` (${d.ptr.hostname})` : ''}`}
+                      href={DOCS.ptr}
+                    />
+                  )}
+                  {!d.nsCount && !d.caa && !d.ptr && (
+                    <span className="text-xs text-slate-400 italic">Not checked</span>
+                  )}
+                </Section>
+
+                {/* Blacklists — full width */}
+                <div className="col-span-2">
+                  <Section title="IP Blacklists (RBL)">
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-1.5">
+                      {d.blacklists.map((bl) =>
+                        bl.blocked ? (
+                          <div
+                            key={bl.list}
+                            className="flex items-center gap-2 text-sm"
+                            title="Unable to verify — public DNS resolver blocked by this RBL"
+                          >
+                            <AlertCircle size={15} className="text-amber-400 shrink-0" />
+                            <a
+                              href={DOCS.rbl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-slate-400 hover:underline underline-offset-2"
+                            >
+                              {bl.list} (unverifiable)
+                              <ExternalLink size={11} className="shrink-0 opacity-50" />
+                            </a>
+                          </div>
+                        ) : (
+                          <Check
+                            key={bl.list}
+                            state={bl.listed ? 'fail' : 'pass'}
+                            label={bl.list}
+                            href={DOCS.rbl}
+                          />
+                        ),
+                      )}
+                      {d.dbl && (
+                        <Check
+                          state={d.dbl.listed ? 'fail' : 'pass'}
+                          label="Spamhaus DBL (domain blacklist)"
+                          href={DOCS.dbl}
+                        />
+                      )}
+                    </div>
+                  </Section>
                 </div>
               </div>
             </div>
@@ -147,7 +389,9 @@ export default function DomainDetailPage() {
 
       {checks.length > 1 && (
         <Card>
-          <CardHeader><CardTitle className="text-base">Check History</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-base">Check History</CardTitle>
+          </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
@@ -158,7 +402,9 @@ export default function DomainDetailPage() {
                   <TableHead>MX</TableHead>
                   <TableHead>SPF</TableHead>
                   <TableHead>DMARC</TableHead>
+                  <TableHead>DKIM</TableHead>
                   <TableHead>HTTPS</TableHead>
+                  <TableHead>SSL</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -184,7 +430,15 @@ export default function DomainDetailPage() {
                     <TableCell>{c.details.mx.pass ? '✓' : '✗'}</TableCell>
                     <TableCell>{c.details.spf.pass ? '✓' : '✗'}</TableCell>
                     <TableCell>{c.details.dmarc.pass ? '✓' : '✗'}</TableCell>
+                    <TableCell>{c.details.dkim.pass ? '✓' : '✗'}</TableCell>
                     <TableCell>{c.details.https.pass ? '✓' : '✗'}</TableCell>
+                    <TableCell>
+                      {c.details.ssl
+                        ? c.details.ssl.pass
+                          ? '✓'
+                          : '✗'
+                        : '—'}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

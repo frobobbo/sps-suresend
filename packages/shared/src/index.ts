@@ -90,13 +90,40 @@ export const reputationCheckSchema = z.object({
   status: reputationStatusSchema,
   details: z.object({
     mx: z.object({ pass: z.boolean(), records: z.array(z.string()) }),
-    spf: z.object({ pass: z.boolean(), record: z.string().nullable() }),
-    dmarc: z.object({ pass: z.boolean(), record: z.string().nullable() }),
+    spf: z.object({
+      pass: z.boolean(),
+      record: z.string().nullable(),
+      policy: z.enum(['hard_fail', 'soft_fail', 'permissive', 'pass_all']).optional(),
+    }),
+    dmarc: z.object({
+      pass: z.boolean(),
+      record: z.string().nullable(),
+      policy: z.enum(['reject', 'quarantine', 'none']).optional(),
+      hasRua: z.boolean().optional(),
+    }),
     dkim: z.object({ pass: z.boolean(), selector: z.string().nullable() }),
     https: z.object({ pass: z.boolean(), statusCode: z.number().nullable() }),
     blacklists: z.array(
-      z.object({ list: z.string(), listed: z.boolean() }),
+      z.object({ list: z.string(), listed: z.boolean(), blocked: z.boolean().optional() }),
     ),
+    httpsRedirect: z.object({ pass: z.boolean() }).optional(),
+    ssl: z.object({
+      pass: z.boolean(),
+      daysUntilExpiry: z.number().nullable(),
+      expiresAt: z.string().nullable(),
+    }).optional(),
+    securityHeaders: z.object({
+      hsts: z.boolean(),
+      xContentTypeOptions: z.boolean(),
+      xFrameOptions: z.boolean(),
+    }).optional(),
+    mtaSts: z.object({ pass: z.boolean(), policy: z.string().optional() }).optional(),
+    tlsRpt: z.object({ pass: z.boolean(), record: z.string().nullable() }).optional(),
+    bimi: z.object({ pass: z.boolean(), record: z.string().nullable() }).optional(),
+    caa: z.object({ pass: z.boolean(), records: z.array(z.string()) }).optional(),
+    nsCount: z.object({ pass: z.boolean(), count: z.number() }).optional(),
+    ptr: z.object({ pass: z.boolean(), hostname: z.string().nullable() }).optional(),
+    dbl: z.object({ listed: z.boolean() }).optional(),
   }),
   checkedAt: z.string().datetime(),
 });
