@@ -12,11 +12,11 @@ spec:
     - name: dns-udp
       port: 53
       protocol: UDP
-      targetPort: dns-udp
+      targetPort: 5353
     - name: dns-tcp
       port: 53
       protocol: TCP
-      targetPort: dns-tcp
+      targetPort: 5353
   selector:
     {{- include "suresend.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: unbound
