@@ -6,6 +6,7 @@ import { Nav } from '@/components/nav';
 export const metadata: Metadata = {
   title: 'StrategyPlus SureSend',
   description: 'Subscription platform for email, SMTP, DNS and website reputation monitoring.',
+  icons: { icon: '/favicon.png' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
