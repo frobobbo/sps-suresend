@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
-import { domains as domainsApi, type Domain } from '@/lib/api';
+import { domains as domainsApi, reputation as repApi, type Domain, type ReputationCheck } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Globe, ShieldCheck, ShieldAlert, ShieldX } from 'lucide-react';
@@ -19,6 +19,7 @@ export default function DashboardPage() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
   const [domainList, setDomainList] = useState<Domain[]>([]);
+  const [latestRep, setLatestRep] = useState<Record<string, ReputationCheck | undefined>>({});
   const [fetching, setFetching] = useState(true);
 
   useEffect(() => {
@@ -27,15 +28,26 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!user) return;
-    domainsApi.list()
-      .then(setDomainList)
-      .finally(() => setFetching(false));
+    domainsApi.list().then((list) => {
+      setDomainList(list);
+      setFetching(false);
+      Promise.all(
+        list.map((d) => repApi.list(d.id).then((checks) => [d.id, checks[0]] as const)),
+      ).then((entries) =>
+        setLatestRep(Object.fromEntries(entries.filter(([, c]) => c !== undefined))),
+      );
+    });
   }, [user]);
 
   if (isLoading || !user) return null;
 
-  const latestStatuses = domainList.flatMap((d) => []).concat(); // placeholder
-  const counts = { clean: 0, warning: 0, blacklisted: 0, unchecked: domainList.length };
+  const repValues = Object.values(latestRep);
+  const counts = {
+    clean: repValues.filter((c) => c?.status === 'clean').length,
+    warning: repValues.filter((c) => c?.status === 'warning').length,
+    blacklisted: repValues.filter((c) => c?.status === 'blacklisted').length,
+    unchecked: domainList.length - repValues.length,
+  };
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -84,9 +96,13 @@ export default function DashboardPage() {
                   >
                     {d.name}
                   </Link>
-                  <Badge variant="outline" className="text-slate-500">
-                    Not checked
-                  </Badge>
+                  {latestRep[d.id] ? (
+                    <Badge className={`border-0 ${statusColor(latestRep[d.id]!.status)}`}>
+                      {latestRep[d.id]!.status}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-slate-400">Unchecked</Badge>
+                  )}
                 </li>
               ))}
             </ul>

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
-import { domains as domainsApi, users as usersApi, type Domain, type User } from '@/lib/api';
+import { domains as domainsApi, reputation as repApi, users as usersApi, type Domain, type ReputationCheck, type User } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,6 +41,7 @@ export default function DomainsPage() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
   const [domainList, setDomainList] = useState<Domain[]>([]);
+  const [latestRep, setLatestRep] = useState<Record<string, ReputationCheck | undefined>>({});
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [delegateOpen, setDelegateOpen] = useState<string | null>(null);
@@ -55,7 +56,14 @@ export default function DomainsPage() {
 
   useEffect(() => {
     if (!user) return;
-    domainsApi.list().then(setDomainList);
+    domainsApi.list().then((list) => {
+      setDomainList(list);
+      Promise.all(
+        list.map((d) => repApi.list(d.id).then((checks) => [d.id, checks[0]] as const)),
+      ).then((entries) =>
+        setLatestRep(Object.fromEntries(entries.filter(([, c]) => c !== undefined))),
+      );
+    });
     if (user.role === 'admin') usersApi.list().then(setAllUsers);
   }, [user]);
 
@@ -139,7 +147,7 @@ export default function DomainsPage() {
                   {d.name}
                 </Link>
               </TableCell>
-              <TableCell>{statusBadge(undefined)}</TableCell>
+              <TableCell>{statusBadge(latestRep[d.id]?.status)}</TableCell>
               <TableCell>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-500">
