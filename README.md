@@ -3,15 +3,21 @@
 StrategyPlus SureSend is a subscription-based platform for helping small businesses monitor and improve email, SMTP, DNS, and website reputation.
 
 ## Stack
-- Frontend: Next.js (App Router, TypeScript)
-- Backend: NestJS (TypeScript)
-- Shared Types: `@suresend/shared`
-- Database: PostgreSQL
-- Cache/Queue: Redis
-- Billing: Stripe (stubbed integration points)
-- Containerization: Docker + Docker Compose
-- CI/CD: GitHub Actions → GitHub Container Registry (GHCR)
-- Kubernetes: Helm chart published to GHCR as an OCI artifact
+
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 14 (App Router, TypeScript) + Tailwind CSS v4 + shadcn/ui |
+| Backend | NestJS (TypeScript) |
+| Auth | JWT (passport-jwt), bcrypt password hashing |
+| Shared Types | `@suresend/shared` (Zod schemas) |
+| Database | PostgreSQL via TypeORM |
+| Cache/Queue | Redis |
+| Billing | Stripe (stubbed) |
+| Containers | Docker + Docker Compose |
+| CI/CD | GitHub Actions → GitHub Container Registry (GHCR) |
+| Kubernetes | Helm chart published to GHCR as an OCI artifact |
+
+---
 
 ## Quick Start
 
@@ -20,29 +26,142 @@ StrategyPlus SureSend is a subscription-based platform for helping small busines
 - pnpm 9+
 - Docker + Docker Compose
 
-### 2) Install dependencies
+### 2) Start the database
+
+```bash
+docker compose up db -d
+```
+
+### 3) Configure environment
+
+```bash
+cp apps/api/.env.example apps/api/.env
+# Edit apps/api/.env — set DATABASE_URL and JWT_SECRET at minimum
+```
+
+### 4) Install dependencies
+
 ```bash
 pnpm install
 ```
 
-### 3) Run locally (without Docker)
+### 5) Run locally
+
 ```bash
 pnpm dev
 ```
+
 - Web: http://localhost:3000
 - API: http://localhost:4000
 
-### 4) Run with Docker
+### 6) Run everything with Docker
+
 ```bash
 docker compose up --build
 ```
 
+---
+
 ## Workspace Layout
-- `apps/web` - Next.js frontend
-- `apps/api` - NestJS backend API
-- `packages/shared` - shared types and validation schemas
-- `helm/suresend` - Helm chart for Kubernetes deployments
-- `.github/workflows` - CI/CD pipelines
+
+```
+apps/
+  web/          Next.js frontend (App Router)
+  api/          NestJS backend API
+packages/
+  shared/       Shared Zod schemas and TypeScript types
+helm/
+  suresend/     Helm chart for Kubernetes deployments
+.github/
+  workflows/    CI/CD pipelines
+```
+
+---
+
+## Features
+
+### Authentication
+- **Self-registration** — `POST /api/auth/register`
+- **Login** — `POST /api/auth/login` returns a 7-day JWT
+- **Current user** — `GET /api/auth/me`
+- Passwords are hashed with bcrypt (12 rounds)
+
+### User Management
+Two roles: `admin` and `user`.
+
+| Endpoint | Access | Description |
+|---|---|---|
+| `GET /api/users` | Admin | List all users |
+| `POST /api/users` | Admin | Create a user with a specified role |
+| `PATCH /api/users/:id/role` | Admin | Change a user's role |
+| `DELETE /api/users/:id` | Admin | Delete a user |
+
+### Domain Management
+Domains can be owned by a user and optionally delegated to other users.
+
+| Endpoint | Access | Description |
+|---|---|---|
+| `GET /api/domains` | Auth | List domains (admin: all; user: owned + delegated) |
+| `POST /api/domains` | Auth | Register a new domain |
+| `GET /api/domains/:id` | Auth + access | Get domain details |
+| `DELETE /api/domains/:id` | Owner or Admin | Delete a domain |
+| `POST /api/domains/:id/access` | Owner or Admin | Delegate access to a user |
+| `DELETE /api/domains/:id/access/:userId` | Owner or Admin | Revoke delegated access |
+
+### Domain Reputation Tracking
+Each reputation check runs the following probes in parallel and returns a score (0–100) and status (`clean` / `warning` / `blacklisted`).
+
+| Check | Method | Score impact |
+|---|---|---|
+| **MX Records** | DNS `resolveMx` | −30 if missing |
+| **SPF Record** | DNS TXT `v=spf1` lookup | −15 if missing |
+| **DMARC Record** | DNS TXT `_dmarc.<domain>` | −15 if missing |
+| **DKIM Record** | DNS TXT, 7 common selectors | −10 if none found |
+| **HTTPS Reachability** | HTTPS GET with 5 s timeout | −10 if unreachable |
+| **RBL Blacklists** | DNS reverse-IP lookup against Spamhaus, SpamCop, SORBS, Barracuda | −20 per listing |
+
+| Endpoint | Access | Description |
+|---|---|---|
+| `POST /api/domains/:id/reputation/check` | Auth + access | Run a new reputation check |
+| `GET /api/domains/:id/reputation` | Auth + access | List last 10 checks |
+
+**Score thresholds:**
+- `clean` — 80–100
+- `warning` — 50–79
+- `blacklisted` — 0–49
+
+### Frontend Pages
+
+| Route | Description |
+|---|---|
+| `/login` | Login and self-registration |
+| `/dashboard` | Domain summary cards |
+| `/domains` | Domain list with add, delete, and access delegation |
+| `/domains/[id]` | Reputation score gauge, per-check breakdown, history table |
+| `/users` | Admin-only user management |
+
+---
+
+## Environment Variables
+
+### `apps/api/.env`
+
+```env
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/suresend
+JWT_SECRET=replace-with-a-long-random-string
+REDIS_URL=redis://localhost:6379
+STRIPE_SECRET_KEY=sk_test_...
+CORS_ORIGIN=http://localhost:3000
+PORT=4000
+```
+
+### `apps/web/.env.local`
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:4000/api
+```
+
+---
 
 ## CI/CD
 
@@ -63,6 +182,15 @@ ghcr.io/frobobbo/sps-suresend/web:<tag>
 ```
 
 Tags produced per build: `latest`, `main`, `sha-<short-sha>`, and semver tags on `v*` releases.
+
+To create a versioned release:
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+---
 
 ## Helm
 
@@ -111,12 +239,15 @@ helm upgrade my-suresend oci://ghcr.io/frobobbo/suresend \
 
 ### One-time GHCR setup
 
-After the first workflow run, make the chart package public so it can be pulled without credentials:
+After the first workflow run, make the packages public so they can be pulled without credentials:
 
-1. Go to **https://github.com/users/frobobbo/packages/container/suresend/settings**
-2. Scroll to **Danger Zone → Change visibility → Public**
+1. Helm chart: **https://github.com/users/frobobbo/packages/container/suresend/settings** → Change visibility → Public
+2. API image: **https://github.com/users/frobobbo/packages/container/sps-suresend%2Fapi/settings** → Change visibility → Public
+3. Web image: **https://github.com/users/frobobbo/packages/container/sps-suresend%2Fweb/settings** → Change visibility → Public
+
+---
 
 ## Notes
-- Current implementation includes secure defaults, module stubs, and starter UI.
-- You can wire in Stripe, DNS reputation providers, and SMTP diagnostics iteratively.
+- `synchronize: true` is enabled in TypeORM for development — replace with migrations before going to production.
 - Never commit real secrets — pass them via `--set` or a sealed values file.
+- Stripe and SMTP diagnostic integrations are stubbed and can be wired in iteratively.
