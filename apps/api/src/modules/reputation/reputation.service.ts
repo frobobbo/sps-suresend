@@ -1,4 +1,4 @@
-import * as dns from 'dns/promises';
+import { promises as dns } from 'dns';
 import * as https from 'https';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
