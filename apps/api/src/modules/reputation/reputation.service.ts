@@ -247,7 +247,7 @@ export class ReputationService implements OnModuleInit {
             ssl: { pass: sslPass, daysUntilExpiry, expiresAt },
             securityHeaders: {
               hsts: !!res.headers['strict-transport-security'],
-              xContentTypeOptions: (res.headers['x-content-type-options'] ?? '').toLowerCase().includes('nosniff'),
+              xContentTypeOptions: String(res.headers['x-content-type-options'] ?? '').toLowerCase().includes('nosniff'),
               xFrameOptions: !!res.headers['x-frame-options'],
             },
           });
