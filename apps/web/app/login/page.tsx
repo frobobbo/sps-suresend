@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { auth as authApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -15,8 +15,9 @@ type Mode = 'login' | 'register';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login } = useAuth();
-  const [mode, setMode] = useState<Mode>('login');
+  const [mode, setMode] = useState<Mode>(searchParams.get('tab') === 'register' ? 'register' : 'login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
