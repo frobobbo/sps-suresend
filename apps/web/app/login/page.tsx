@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { auth as authApi } from '@/lib/api';
@@ -39,11 +40,26 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-2xl text-[var(--sp-navy)]">
-            {mode === 'login' ? 'Sign in to SureSend' : 'Create account'}
+    <div
+      className="min-h-screen flex flex-col items-center justify-center p-4"
+      style={{ background: 'linear-gradient(160deg, var(--sp-navy) 0%, #002030 60%, #003040 100%)' }}
+    >
+      {/* Logo */}
+      <div className="mb-8">
+        <Image
+          src="/logo.png"
+          alt="SureSend"
+          width={320}
+          height={213}
+          priority
+          className="w-64 h-auto drop-shadow-lg"
+        />
+      </div>
+
+      <Card className="w-full max-w-md border-0 shadow-2xl">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-2xl" style={{ color: 'var(--sp-navy)' }}>
+            {mode === 'login' ? 'Sign in' : 'Create account'}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -76,14 +92,20 @@ export default function LoginPage() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button
+              type="submit"
+              className="w-full text-white"
+              style={{ background: 'var(--sp-sky)' }}
+              disabled={loading}
+            >
               {loading ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}
             </Button>
           </form>
           <p className="text-sm text-slate-500 text-center mt-4">
             {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
             <button
-              className="text-[var(--sp-blue)] font-medium hover:underline"
+              className="font-medium hover:underline"
+              style={{ color: 'var(--sp-sky)' }}
               onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
             >
               {mode === 'login' ? 'Register' : 'Sign in'}

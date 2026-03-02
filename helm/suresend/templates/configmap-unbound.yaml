@@ -27,7 +27,6 @@ data:
         access-control: 192.168.0.0/16 allow
 
         root-hints: "/opt/unbound/etc/unbound/root.hints"
-        auto-trust-anchor-file: "/opt/unbound/etc/unbound/root.key"
 
         hide-identity: yes
         hide-version: yes
@@ -36,7 +35,6 @@ data:
         harden-below-nxdomain: yes
         use-caps-for-id: yes
         val-clean-additional: yes
-        deny-any: yes
 
         cache-max-ttl: 86400
         cache-min-ttl: 300

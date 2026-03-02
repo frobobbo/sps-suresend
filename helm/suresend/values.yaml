@@ -111,7 +111,7 @@ unbound:
   enabled: true
   image:
     repository: mvance/unbound
-    tag: latest
+    tag: "1.21.1"
     pullPolicy: IfNotPresent
   resources:
     requests:

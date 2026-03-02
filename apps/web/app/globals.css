@@ -6,36 +6,14 @@
 
 @layer base {
   :root {
-    /* StrategyPlus brand tokens */
-    --sp-navy: #0f2748;
-    --sp-blue: #1f5f9f;
-    --sp-sky: #5aa3da;
-    --sp-teal: #2f9e8f;
-    --sp-ice: #eff6fc;
-    --sp-ink: #0f1726;
+    /* SureSend brand tokens — derived from logo palette */
+    --sp-navy: #001018;      /* logo dark background */
+    --sp-blue: #0070b0;      /* deep anchor blue */
+    --sp-sky: #00a0e0;       /* primary logo cyan-blue */
+    --sp-sky-light: #00b8e8; /* lighter cyan accent */
+    --sp-ice: #e5f5fc;       /* very light cyan tint */
+    --sp-ink: #001018;
     --sp-white: #ffffff;
-
-    /* shadcn/ui CSS variable mappings */
-    --background: 0 0% 100%;
-    --foreground: 222 84% 5%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 84% 5%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 84% 5%;
-    --primary: 214 71% 37%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 174 56% 40%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 84% 5%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 214 71% 37%;
-    --radius: 0.5rem;
   }
   * {
     @apply border-border outline-ring/50;
@@ -55,7 +33,7 @@
     padding: 0;
     font-family: 'Manrope', 'Segoe UI', sans-serif;
     color: var(--sp-ink);
-    background: linear-gradient(145deg, #f9fbfe 0%, #edf4fc 45%, #f3f9ff 100%);
+    background: linear-gradient(145deg, #f5fbfe 0%, #e5f5fc 45%, #f0faff 100%);
   }
 
   a {
@@ -112,36 +90,38 @@
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --foreground: oklch(0.09 0.02 228);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.09 0.02 228);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.09 0.02 228);
+  /* primary = logo cyan-blue #00a0e0 */
+  --primary: oklch(0.637 0.178 213);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.94 0.018 213);
+  --secondary-foreground: oklch(0.09 0.02 228);
+  --muted: oklch(0.96 0.008 213);
+  --muted-foreground: oklch(0.52 0.03 228);
+  --accent: oklch(0.94 0.018 213);
+  --accent-foreground: oklch(0.09 0.02 228);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
+  --border: oklch(0.9 0.015 213);
+  --input: oklch(0.9 0.015 213);
+  --ring: oklch(0.637 0.178 213);
+  --chart-1: oklch(0.637 0.178 213);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* sidebar = dark navy from logo */
+  --sidebar: oklch(0.09 0.02 228);
+  --sidebar-foreground: oklch(0.96 0.008 213);
+  --sidebar-primary: oklch(0.637 0.178 213);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.16 0.025 228);
+  --sidebar-accent-foreground: oklch(0.96 0.008 213);
+  --sidebar-border: oklch(0.18 0.025 228);
+  --sidebar-ring: oklch(0.637 0.178 213);
 }
 
 .dark {
