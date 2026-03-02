@@ -11,29 +11,37 @@ on:
 
 jobs:
   release:
-    name: Package and Push Chart to GHCR (OCI)
+    name: Package and publish chart to GitHub Pages
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      packages: write
+      contents: write  # create GitHub Releases and push to gh-pages
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # chart-releaser needs full history to detect version changes
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
       - name: Install Helm
         uses: azure/setup-helm@v4
 
-      - name: Log in to GHCR
+      - name: Add Bitnami chart repository
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | \
-            helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
 
       - name: Resolve chart dependencies
         run: helm dependency update helm/suresend
 
-      - name: Package chart
-        run: helm package helm/suresend --destination /tmp/charts
-
-      - name: Push chart to GHCR
-        run: helm push /tmp/charts/suresend-*.tgz oci://ghcr.io/${{ github.repository_owner }}
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.6.0
+        with:
+          charts_dir: helm
+          skip_existing: true
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
