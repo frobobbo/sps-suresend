@@ -1,4 +1,6 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api';
+// Relative URL — requests go through the Next.js proxy at app/api/[...path]/route.ts
+// which forwards them to the backend using the API_INTERNAL_URL runtime env var.
+const API_BASE = '/api';
 
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;

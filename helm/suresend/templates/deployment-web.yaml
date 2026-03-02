@@ -34,16 +34,11 @@ spec:
               containerPort: {{ .Values.web.service.port }}
               protocol: TCP
           env:
-            - name: NEXT_PUBLIC_API_URL
+            - name: API_INTERNAL_URL
               valueFrom:
                 configMapKeyRef:
                   name: {{ include "suresend.fullname" . }}
-                  key: NEXT_PUBLIC_API_URL
-            - name: NEXT_PUBLIC_APP_NAME
-              valueFrom:
-                configMapKeyRef:
-                  name: {{ include "suresend.fullname" . }}
-                  key: NEXT_PUBLIC_APP_NAME
+                  key: API_INTERNAL_URL
           livenessProbe:
             httpGet:
               path: /

@@ -38,6 +38,10 @@ api:
     databaseUrl: ""
     redisUrl: "redis://redis:6379"
     stripeSecretKey: "sk_test_replace"
+    # Optional: seed a default admin user on first startup.
+    # Leave both empty to skip seeding.
+    seedAdminEmail: ""
+    seedAdminPassword: ""
 
   podAnnotations: {}
   nodeSelector: {}
@@ -66,9 +70,10 @@ web:
       memory: 512Mi
 
   env:
-    # Public URL of the API, accessible from the browser
-    apiUrl: "https://api.suresend.example.com"
-    appName: "StrategyPlus SureSend"
+    # Internal URL the Next.js server uses to proxy /api/* requests to the API.
+    # Leave empty to auto-construct from the API service name (recommended).
+    # Override only when the API is hosted outside the same cluster.
+    apiInternalUrl: ""
 
   podAnnotations: {}
   nodeSelector: {}

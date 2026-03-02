@@ -9,6 +9,5 @@ data:
   NODE_ENV: {{ .Values.api.env.nodeEnv | quote }}
   PORT: {{ .Values.api.env.port | quote }}
   CORS_ORIGIN: {{ .Values.api.env.corsOrigin | quote }}
-  # Web
-  NEXT_PUBLIC_API_URL: {{ .Values.web.env.apiUrl | quote }}
-  NEXT_PUBLIC_APP_NAME: {{ .Values.web.env.appName | quote }}
+  # Web — server-side URL used by the Next.js proxy to reach the API
+  API_INTERNAL_URL: {{ .Values.web.env.apiInternalUrl | default (printf "http://%s-api:%s" (include "suresend.fullname" .) (.Values.api.env.port)) | quote }}

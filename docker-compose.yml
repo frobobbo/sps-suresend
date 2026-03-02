@@ -5,8 +5,10 @@ services:
       dockerfile: Dockerfile.web
     container_name: suresend-web
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:4000
-      NEXT_PUBLIC_APP_NAME: StrategyPlus SureSend
+      # Server-side URL used by the Next.js proxy to reach the API container.
+      # The browser never calls the API directly — all /api/* requests go
+      # through the Next.js server which forwards them here.
+      API_INTERNAL_URL: http://api:4000
     ports:
       - '3000:3000'
     depends_on:
@@ -25,6 +27,9 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/suresend
       REDIS_URL: redis://redis:6379
       STRIPE_SECRET_KEY: sk_test_replace
+      # Optional: seed a default admin user on first startup
+      SEED_ADMIN_EMAIL: admin@example.com
+      SEED_ADMIN_PASSWORD: change-me-please
     ports:
       - '4000:4000'
     depends_on:
