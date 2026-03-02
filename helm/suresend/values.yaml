@@ -8,7 +8,7 @@ imagePullSecrets: []
 api:
   image:
     repository: ghcr.io/frobobbo/sps-suresend/api
-    tag: ""  # defaults to .Chart.AppVersion
+    tag: "latest"  # defaults to .Chart.AppVersion
     pullPolicy: IfNotPresent
 
   replicaCount: 1
@@ -52,7 +52,7 @@ api:
 web:
   image:
     repository: ghcr.io/frobobbo/sps-suresend/web
-    tag: ""
+    tag: "latest"
     pullPolicy: IfNotPresent
 
   replicaCount: 1

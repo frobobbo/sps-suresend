@@ -1,0 +1,47 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init)",
+      "Bash(git remote add origin git@github.com:frobobbo/sps-suresend.git)",
+      "Bash(git branch -m main)",
+      "Bash(git add .dockerignore .env.example .gitignore Dockerfile.api Dockerfile.web README.md docker-compose.yml package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json turbo.json apps/ packages/ .github/ helm/)",
+      "Bash(git commit:*)",
+      "Bash(git config user.name \"Brett Johnson\")",
+      "Bash(git config user.email \"johnsobd@gmail.com\")",
+      "Bash(git push -u origin main)",
+      "Bash(gh run list --repo frobobbo/sps-suresend --limit 5)",
+      "WebFetch(domain:github.com)",
+      "Bash(git add Dockerfile.api Dockerfile.web)",
+      "Bash(git push)",
+      "Bash(git pull --rebase)",
+      "Bash(git checkout --orphan gh-pages)",
+      "Bash(git reset --hard)",
+      "Bash(git push origin gh-pages)",
+      "Bash(git checkout main)",
+      "WebFetch(domain:frobobbo.github.io)",
+      "Bash(git push origin v0.1.3)",
+      "Bash(git push origin main)",
+      "Bash(pnpm --filter api add @nestjs/typeorm typeorm pg @nestjs/jwt @nestjs/passport passport passport-jwt passport-local bcrypt)",
+      "Bash(npm exec -- pnpm --filter api add @nestjs/typeorm typeorm pg @nestjs/jwt @nestjs/passport passport passport-jwt passport-local bcrypt)",
+      "Bash(npm exec -- pnpm --filter api add -D @types/bcrypt @types/passport-jwt @types/passport-local)",
+      "Bash(npm exec -- pnpm add tailwindcss postcss autoprefixer)",
+      "Bash(npm exec -- pnpm add -D autoprefixer)",
+      "Bash(npx shadcn@latest init --defaults)",
+      "Bash(npm exec -- pnpm add -D @tailwindcss/postcss)",
+      "Bash(npm exec -- pnpm --filter web add clsx tailwind-merge class-variance-authority lucide-react radix-ui tw-animate-css)",
+      "Bash(npx shadcn@latest add button input label card badge table dialog select alert separator --overwrite)",
+      "Bash(node -e \"const {execSync} = require\\(''child_process''\\); console.log\\(execSync\\(''npm root -g''\\).toString\\(\\).trim\\(\\)\\)\")",
+      "Read(//home/brett/.local/share/fnm/node-versions/v20.20.0/installation/bin/**)",
+      "Read(//home/brett/**)",
+      "Bash(PNPM=/home/brett/.local/share/fnm/node-versions/v20.20.0/installation/lib/node_modules/corepack/shims/pnpm)",
+      "Bash(ln -sf \"$PNPM\" /tmp/pnpm)",
+      "Bash(export PATH=\"/tmp:$PATH\")",
+      "Bash(npm exec -- pnpm --filter web add shadcn)",
+      "Bash(git add apps/web/app/api/[...path]/route.ts apps/web/lib/api.ts apps/api/src/seed/seed.service.ts apps/api/src/seed/seed.module.ts apps/api/src/app.module.ts apps/api/.env.example docker-compose.yml helm/suresend/templates/configmap.yaml helm/suresend/templates/deployment-web.yaml helm/suresend/templates/secret.yaml helm/suresend/values.yaml)"
+    ],
+    "additionalDirectories": [
+      "/home/brett/Documents/projects/sps-suresend/apps/api/src",
+      "/home/brett/Documents/projects/sps-suresend/apps/web/app/domains"
+    ]
+  }
+}
