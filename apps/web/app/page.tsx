@@ -89,10 +89,7 @@ export default function LandingPage() {
         <div className="flex items-center gap-3">
           <Link
             href="/login"
-            className="text-sm font-medium px-4 py-2 rounded-md transition-colors"
-            style={{ color: 'oklch(0.7 0.05 213)' }}
-            onMouseOver={(e) => ((e.currentTarget as HTMLElement).style.color = '#fff')}
-            onMouseOut={(e) => ((e.currentTarget as HTMLElement).style.color = 'oklch(0.7 0.05 213)')}
+            className="text-sm font-medium px-4 py-2 rounded-md transition-colors text-slate-400 hover:text-white"
           >
             Sign in
           </Link>

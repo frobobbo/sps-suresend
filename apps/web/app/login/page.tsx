@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 type Mode = 'login' | 'register';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login } = useAuth();
@@ -45,7 +45,6 @@ export default function LoginPage() {
       className="min-h-screen flex flex-col items-center justify-center p-4"
       style={{ background: 'linear-gradient(160deg, var(--sp-navy) 0%, #002030 60%, #003040 100%)' }}
     >
-      {/* Logo */}
       <div className="mb-8">
         <Image
           src="/logo.png"
@@ -115,5 +114,13 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }
