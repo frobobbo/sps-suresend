@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
-import { CheckCircle2, Loader2, RefreshCw, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader2, RefreshCw, XCircle } from 'lucide-react';
 
 function Check({ pass, label }: { pass: boolean; label: string }) {
   return (
@@ -120,7 +120,14 @@ export default function DomainDetailPage() {
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Blacklist Status</p>
                   <div className="grid grid-cols-2 gap-1">
                     {latest.details.blacklists.map((bl) => (
-                      <Check key={bl.list} pass={!bl.listed} label={bl.list} />
+                      bl.blocked ? (
+                        <div key={bl.list} className="flex items-center gap-2 text-sm" title="Unable to verify — public DNS resolver blocked by this RBL">
+                          <AlertCircle size={16} className="text-amber-400 shrink-0" />
+                          <span className="text-slate-400">{bl.list} (unverifiable)</span>
+                        </div>
+                      ) : (
+                        <Check key={bl.list} pass={!bl.listed} label={bl.list} />
+                      )
                     ))}
                   </div>
                 </div>

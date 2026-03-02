@@ -146,7 +146,7 @@ export interface ReputationCheck {
     dmarc: { pass: boolean; record: string | null };
     dkim: { pass: boolean; selector: string | null };
     https: { pass: boolean; statusCode: number | null };
-    blacklists: { list: string; listed: boolean }[];
+    blacklists: { list: string; listed: boolean; blocked?: boolean }[];
   };
   checkedAt: string;
 }

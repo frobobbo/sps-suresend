@@ -13,13 +13,25 @@ const RBLS = [
   'b.barracuda.com',
 ];
 
+// Return codes that indicate the querying resolver is blocked by the RBL,
+// not that the IP is actually listed. Spamhaus (and others) return these
+// when queries arrive through public resolvers like 8.8.8.8 or 1.1.1.1.
+const BLOCKED_RESOLVER_CODES = new Set(['127.255.255.254', '127.255.255.255']);
+
+interface BlacklistResult {
+  list: string;
+  listed: boolean;
+  /** true when the RBL refused the query (public resolver blocked) — not a real listing */
+  blocked?: boolean;
+}
+
 interface CheckDetails {
   mx: { pass: boolean; records: string[] };
   spf: { pass: boolean; record: string | null };
   dmarc: { pass: boolean; record: string | null };
   dkim: { pass: boolean; selector: string | null };
   https: { pass: boolean; statusCode: number | null };
-  blacklists: { list: string; listed: boolean }[];
+  blacklists: BlacklistResult[];
 }
 
 @Injectable()
@@ -111,7 +123,7 @@ export class ReputationService {
     });
   }
 
-  private async checkBlacklists(domain: string): Promise<{ list: string; listed: boolean }[]> {
+  private async checkBlacklists(domain: string): Promise<BlacklistResult[]> {
     let ip: string;
     try {
       const addresses = await dns.resolve4(domain);
@@ -125,7 +137,14 @@ export class ReputationService {
     return Promise.all(
       RBLS.map(async (list) => {
         try {
-          await dns.resolve4(`${reversed}.${list}`);
+          const results = await dns.resolve4(`${reversed}.${list}`);
+          const returnCode = results[0];
+          // Spamhaus and some other RBLs return 127.255.255.254 / 127.255.255.255
+          // when the query comes from a public resolver (e.g. 8.8.8.8, 1.1.1.1).
+          // This is not a real listing — treat it as indeterminate and don't penalise.
+          if (BLOCKED_RESOLVER_CODES.has(returnCode)) {
+            return { list, listed: false, blocked: true };
+          }
           return { list, listed: true };
         } catch {
           return { list, listed: false };
