@@ -12,7 +12,7 @@ const RBLS = [
   'zen.spamhaus.org',
   'bl.spamcop.net',
   'dnsbl.sorbs.net',
-  'b.barracuda.com',
+  'cbl.abuseat.org',  // Composite Blocking List (replaced defunct b.barracuda.com)
 ];
 
 // Return codes that indicate the querying resolver is blocked by the RBL,
