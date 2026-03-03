@@ -177,6 +177,11 @@ function statusFor(score: number): 'clean' | 'warning' | 'critical' {
   return score >= 80 ? 'clean' : score >= 50 ? 'warning' : 'critical';
 }
 
+function cardAccent(score: number): string {
+  const s = statusFor(score);
+  return s === 'clean' ? '#10b981' : s === 'warning' ? '#f59e0b' : '#ef4444';
+}
+
 function HelpPopover({ help, href }: { help: string; href?: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -244,7 +249,7 @@ function Check({
   const showFix = fixKey && FIXABLE.has(fixKey) && state !== 'pass' && onFix;
 
   return (
-    <div className="flex items-center gap-2 text-sm">
+    <div className="flex items-center gap-2 text-sm rounded-md px-1.5 -mx-1.5 hover:bg-slate-50 transition-colors">
       {icon}
       <span className={`flex-1 ${textClass}`}>{label}</span>
       {help && <HelpPopover help={help} href={href} />}
@@ -265,7 +270,10 @@ function Check({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">{title}</p>
+      <div className="flex items-center gap-2 mb-2">
+        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider shrink-0">{title}</p>
+        <div className="flex-1 h-px bg-slate-100" />
+      </div>
       <div className="space-y-1.5">{children}</div>
     </div>
   );
@@ -562,7 +570,7 @@ export default function DomainDetailPage() {
   const onFix = domain.cloudflareConnected && canManage ? handleFix : undefined;
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -648,7 +656,7 @@ export default function DomainDetailPage() {
 
       {/* ── Score Overview ─────────────────────────────────────────────── */}
       {latest && (
-        <Card>
+        <Card className="border-t-[3px]" style={{ borderTopColor: cardAccent(latest.score) }}>
           <CardHeader>
             <CardTitle className="text-base flex items-center justify-between">
               Score Overview
@@ -678,121 +686,206 @@ export default function DomainDetailPage() {
         </Card>
       )}
 
-      {/* ── Email Reputation ────────────────────────────────────────────── */}
-      {latest && d && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center">
-              Email Reputation
-              <ScorePill score={latest.emailScore} status={statusFor(latest.emailScore)} />
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5">
+      {/* ── Email & Web Reputation — side by side ──────────────────────── */}
+      {latest && d ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
-            {d.mx.mailProvider && (
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <span className="text-xs text-slate-500">
-                  Mail hosted by{' '}
-                  <span className="font-semibold text-slate-700">
-                    {d.mx.mailProvider === 'google' ? 'Google Workspace' : 'Microsoft 365'}
+          {/* Email Reputation */}
+          <Card className="border-t-[3px]" style={{ borderTopColor: cardAccent(latest.emailScore) }}>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center">
+                Email Reputation
+                <ScorePill score={latest.emailScore} status={statusFor(latest.emailScore)} />
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+
+              {d.mx.mailProvider && (
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <span className="text-xs text-slate-500">
+                    Mail hosted by{' '}
+                    <span className="font-semibold text-slate-700">
+                      {d.mx.mailProvider === 'google' ? 'Google Workspace' : 'Microsoft 365'}
+                    </span>
                   </span>
-                </span>
-                {!d.dkim.pass && !domain.cloudflareConnected && canManage && (
-                  <span className="text-[11px] text-sky-600">Connect Cloudflare to auto-fix DKIM</span>
-                )}
-              </div>
-            )}
-
-            <Section title="Authentication">
-              <Check state={d.mx.pass ? 'pass' : 'fail'}
-                label={`MX Records${d.mx.records[0] ? ` (${d.mx.records[0]})` : ''}`}
-                href={DOCS.mx} checkKey="mx" />
-              <Check state={spfState(d.spf)} label={spfLabel(d.spf)} href={DOCS.spf}
-                fixKey="spf" onFix={onFix} fixing={fixing === 'spf'} />
-              <Check state={dmarcState(d.dmarc)} label={dmarcLabel(d.dmarc)} href={DOCS.dmarc}
-                fixKey="dmarc" onFix={onFix} fixing={fixing === 'dmarc'} />
-              {!d.dkim.pass && d.mx.mailProvider && domain.cloudflareConnected && canManage ? (
-                <div className="flex items-center gap-2 text-sm">
-                  <XCircle size={15} className="text-red-400 shrink-0" />
-                  <span className="flex-1 text-slate-500">DKIM</span>
-                  {HELP.dkim?.fail && <HelpPopover help={HELP.dkim.fail} href={DOCS.dkim} />}
-                  <button
-                    onClick={() => setDkimDialogOpen(true)}
-                    disabled={fixing === 'dkim-google' || fixing === 'dkim-microsoft'}
-                    className="shrink-0 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border border-sky-200 bg-sky-50 text-sky-600 hover:bg-sky-100 font-medium transition-colors disabled:opacity-50"
-                  >
-                    {(fixing === 'dkim-google' || fixing === 'dkim-microsoft')
-                      ? <Loader2 size={10} className="animate-spin" />
-                      : <Wrench size={10} />}
-                    Setup
-                  </button>
+                  {!d.dkim.pass && !domain.cloudflareConnected && canManage && (
+                    <span className="text-[11px] text-sky-600">Connect Cloudflare to auto-fix DKIM</span>
+                  )}
                 </div>
-              ) : (
-                <Check state={d.dkim.pass ? 'pass' : 'fail'}
-                  label={`DKIM${d.dkim.selector ? ` (${d.dkim.selector})` : ''}`}
-                  href={DOCS.dkim} checkKey="dkim" />
               )}
-              {d.spf.lookups !== undefined && (
-                <Check state={spfLookupsState(d.spf)} label={spfLookupsLabel(d.spf)}
-                  href={DOCS.spfLookups} checkKey="spfLookups" />
-              )}
-            </Section>
 
-            <Section title="Transport Security">
-              {d.mtaSts ? (
-                <Check state={d.mtaSts.pass ? 'pass' : 'fail'}
-                  label={`MTA-STS${d.mtaSts.policy ? ` (${d.mtaSts.policy})` : ''}`}
-                  href={DOCS.mtaSts} fixKey="mtaSts" onFix={onFix} fixing={fixing === 'mtaSts'} />
-              ) : null}
-              {d.tlsRpt ? (
-                <Check state={d.tlsRpt.pass ? 'pass' : 'fail'} label="TLS Reporting (TLS-RPT)"
-                  href={DOCS.tlsRpt} fixKey="tlsRpt" onFix={onFix} fixing={fixing === 'tlsRpt'} />
-              ) : null}
-              {d.bimi ? (
-                <Check state={d.bimi.pass ? 'pass' : 'fail'}
-                  label="BIMI (Brand Logo in Email)" href={DOCS.bimi} checkKey="bimi" />
-              ) : null}
-              {!d.mtaSts && !d.tlsRpt && !d.bimi && (
-                <span className="text-xs text-slate-400 italic">Not checked</span>
-              )}
-            </Section>
-
-            {d.ptr && (
-              <Section title="Sending Infrastructure">
-                <Check state={d.ptr.pass ? 'pass' : 'fail'}
-                  label={`PTR / rDNS${d.ptr.hostname ? ` (${d.ptr.hostname})` : ''}`}
-                  href={DOCS.ptr} checkKey="ptr" />
+              <Section title="Authentication">
+                <Check state={d.mx.pass ? 'pass' : 'fail'}
+                  label={`MX Records${d.mx.records[0] ? ` (${d.mx.records[0]})` : ''}`}
+                  href={DOCS.mx} checkKey="mx" />
+                <Check state={spfState(d.spf)} label={spfLabel(d.spf)} href={DOCS.spf}
+                  fixKey="spf" onFix={onFix} fixing={fixing === 'spf'} />
+                <Check state={dmarcState(d.dmarc)} label={dmarcLabel(d.dmarc)} href={DOCS.dmarc}
+                  fixKey="dmarc" onFix={onFix} fixing={fixing === 'dmarc'} />
+                {!d.dkim.pass && d.mx.mailProvider && domain.cloudflareConnected && canManage ? (
+                  <div className="flex items-center gap-2 text-sm rounded-md px-1.5 -mx-1.5 hover:bg-slate-50 transition-colors">
+                    <XCircle size={15} className="text-red-400 shrink-0" />
+                    <span className="flex-1 text-slate-500">DKIM</span>
+                    {HELP.dkim?.fail && <HelpPopover help={HELP.dkim.fail} href={DOCS.dkim} />}
+                    <button
+                      onClick={() => setDkimDialogOpen(true)}
+                      disabled={fixing === 'dkim-google' || fixing === 'dkim-microsoft'}
+                      className="shrink-0 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border border-sky-200 bg-sky-50 text-sky-600 hover:bg-sky-100 font-medium transition-colors disabled:opacity-50"
+                    >
+                      {(fixing === 'dkim-google' || fixing === 'dkim-microsoft')
+                        ? <Loader2 size={10} className="animate-spin" />
+                        : <Wrench size={10} />}
+                      Setup
+                    </button>
+                  </div>
+                ) : (
+                  <Check state={d.dkim.pass ? 'pass' : 'fail'}
+                    label={`DKIM${d.dkim.selector ? ` (${d.dkim.selector})` : ''}`}
+                    href={DOCS.dkim} checkKey="dkim" />
+                )}
+                {d.spf.lookups !== undefined && (
+                  <Check state={spfLookupsState(d.spf)} label={spfLookupsLabel(d.spf)}
+                    href={DOCS.spfLookups} checkKey="spfLookups" />
+                )}
               </Section>
-            )}
 
-            <Section title="IP Blacklists">
-              <div className="grid grid-cols-2 gap-x-8 gap-y-1.5">
-                {d.blacklists.map((bl) =>
-                  bl.blocked ? (
-                    <div key={bl.list} className="flex items-center gap-2 text-sm">
-                      <AlertCircle size={15} className="text-amber-400 shrink-0" />
-                      <span className="flex-1 text-slate-400">{bl.list} (unverifiable)</span>
-                      {HELP.rbl?.blocked && (
-                        <HelpPopover help={HELP.rbl.blocked} href={DOCS.rbl} />
-                      )}
-                    </div>
-                  ) : (
-                    <Check key={bl.list} state={bl.listed ? 'fail' : 'pass'}
-                      label={bl.list} href={DOCS.rbl} checkKey="rbl" />
-                  )
+              <Section title="Transport Security">
+                {d.mtaSts ? (
+                  <Check state={d.mtaSts.pass ? 'pass' : 'fail'}
+                    label={`MTA-STS${d.mtaSts.policy ? ` (${d.mtaSts.policy})` : ''}`}
+                    href={DOCS.mtaSts} fixKey="mtaSts" onFix={onFix} fixing={fixing === 'mtaSts'} />
+                ) : null}
+                {d.tlsRpt ? (
+                  <Check state={d.tlsRpt.pass ? 'pass' : 'fail'} label="TLS Reporting (TLS-RPT)"
+                    href={DOCS.tlsRpt} fixKey="tlsRpt" onFix={onFix} fixing={fixing === 'tlsRpt'} />
+                ) : null}
+                {d.bimi ? (
+                  <Check state={d.bimi.pass ? 'pass' : 'fail'}
+                    label="BIMI (Brand Logo in Email)" href={DOCS.bimi} checkKey="bimi" />
+                ) : null}
+                {!d.mtaSts && !d.tlsRpt && !d.bimi && (
+                  <span className="text-xs text-slate-400 italic">Not checked</span>
                 )}
-                {d.dbl && (
-                  <Check state={d.dbl.listed ? 'fail' : 'pass'}
-                    label="Spamhaus DBL (domain blacklist)" href={DOCS.dbl} checkKey="dbl" />
-                )}
-              </div>
-            </Section>
+              </Section>
 
+              {d.ptr && (
+                <Section title="Sending Infrastructure">
+                  <Check state={d.ptr.pass ? 'pass' : 'fail'}
+                    label={`PTR / rDNS${d.ptr.hostname ? ` (${d.ptr.hostname})` : ''}`}
+                    href={DOCS.ptr} checkKey="ptr" />
+                </Section>
+              )}
+
+              <Section title="IP Blacklists">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                  {d.blacklists.map((bl) =>
+                    bl.blocked ? (
+                      <div key={bl.list} className="flex items-center gap-2 text-sm">
+                        <AlertCircle size={15} className="text-amber-400 shrink-0" />
+                        <span className="flex-1 text-slate-400">{bl.list} (unverifiable)</span>
+                        {HELP.rbl?.blocked && (
+                          <HelpPopover help={HELP.rbl.blocked} href={DOCS.rbl} />
+                        )}
+                      </div>
+                    ) : (
+                      <Check key={bl.list} state={bl.listed ? 'fail' : 'pass'}
+                        label={bl.list} href={DOCS.rbl} checkKey="rbl" />
+                    )
+                  )}
+                  {d.dbl && (
+                    <Check state={d.dbl.listed ? 'fail' : 'pass'}
+                      label="Spamhaus DBL (domain blacklist)" href={DOCS.dbl} checkKey="dbl" />
+                  )}
+                </div>
+              </Section>
+
+            </CardContent>
+          </Card>
+
+          {/* Web Reputation */}
+          <Card className="border-t-[3px]" style={{ borderTopColor: cardAccent(latest.webScore) }}>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center">
+                Web Reputation
+                <ScorePill score={latest.webScore} status={statusFor(latest.webScore)} />
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+
+              <Section title="Web Security">
+                <Check state={d.https.pass ? 'pass' : 'fail'}
+                  label={`HTTPS${d.https.statusCode ? ` (${d.https.statusCode})` : ''}`}
+                  href={DOCS.https} checkKey="https" />
+                {d.httpsRedirect && (
+                  <Check state={d.httpsRedirect.pass ? 'pass' : 'fail'}
+                    label="HTTP→HTTPS Redirect" href={DOCS.httpsRedirect} checkKey="httpsRedirect" />
+                )}
+                {d.ssl && (
+                  <Check state={sslState(d.ssl)} label={sslLabel(d.ssl)}
+                    href={DOCS.ssl} checkKey="ssl" />
+                )}
+                {d.securityHeaders && (<>
+                  <Check state={d.securityHeaders.hsts ? 'pass' : 'fail'}
+                    label="HSTS" href={DOCS.hsts} checkKey="hsts" />
+                  <Check state={d.securityHeaders.xContentTypeOptions ? 'pass' : 'fail'}
+                    label="X-Content-Type-Options" href={DOCS.xContentType} checkKey="xContentType" />
+                  <Check state={d.securityHeaders.xFrameOptions ? 'pass' : 'fail'}
+                    label="X-Frame-Options" href={DOCS.xFrame} checkKey="xFrame" />
+                  <Check state={d.securityHeaders.csp ? 'pass' : 'fail'}
+                    label="Content Security Policy (CSP)" href={DOCS.csp} checkKey="csp" />
+                  <Check state={d.securityHeaders.referrerPolicy ? 'pass' : 'fail'}
+                    label="Referrer-Policy" href={DOCS.referrerPolicy} checkKey="referrerPolicy" />
+                  <Check state={d.securityHeaders.permissionsPolicy ? 'pass' : 'fail'}
+                    label="Permissions-Policy" href={DOCS.permissionsPolicy} checkKey="permissionsPolicy" />
+                </>)}
+                {d.tlsVersion && (
+                  <Check state={tlsVersionState(d.tlsVersion)} label={tlsVersionLabel(d.tlsVersion)}
+                    href={DOCS.tlsVersion} checkKey="tlsVersion" />
+                )}
+                {d.wwwRedirect?.exists && (
+                  <Check state={d.wwwRedirect.pass ? 'pass' : 'fail'}
+                    label="www → HTTPS Redirect" href={DOCS.wwwRedirect} checkKey="wwwRedirect" />
+                )}
+              </Section>
+
+              <Section title="DNS Health">
+                {d.nsCount && (
+                  <Check state={d.nsCount.pass ? 'pass' : 'fail'}
+                    label={`Nameservers (${d.nsCount.count} found, need ≥2)`}
+                    href={DOCS.ns} checkKey="ns" />
+                )}
+                {d.caa && (
+                  <Check state={d.caa.pass ? 'pass' : 'fail'}
+                    label={`CAA Records${d.caa.records[0] ? ` (${d.caa.records[0]})` : ''}`}
+                    href={DOCS.caa} fixKey="caa" onFix={onFix} fixing={fixing === 'caa'} />
+                )}
+                {d.dnssec && (
+                  <Check state={d.dnssec.pass ? 'pass' : 'fail'}
+                    label="DNSSEC" href={DOCS.dnssec}
+                    fixKey="dnssec" onFix={onFix} fixing={fixing === 'dnssec'} />
+                )}
+                {d.domainExpiry && (
+                  <Check state={domainExpiryState(d.domainExpiry)} label={domainExpiryLabel(d.domainExpiry)}
+                    href={DOCS.domainExpiry} checkKey="domainExpiry" />
+                )}
+                {!d.nsCount && !d.caa && !d.dnssec && !d.domainExpiry && (
+                  <span className="text-xs text-slate-400 italic">Not checked</span>
+                )}
+              </Section>
+
+            </CardContent>
+          </Card>
+
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="py-8 text-center text-slate-500">
+            No checks run yet. Click <strong>Run Check</strong> to get started.
           </CardContent>
         </Card>
       )}
 
-      {/* DKIM setup dialog — rendered outside the card so it can overlay correctly */}
+      {/* DKIM setup dialog — rendered outside the grid so it can overlay correctly */}
       {latest && d && d.mx.mailProvider && (
         <DkimFixDialog
           open={dkimDialogOpen}
@@ -805,90 +898,6 @@ export default function DomainDetailPage() {
             await handleFix(check, payload);
           }}
         />
-      )}
-
-      {/* ── Web Reputation ──────────────────────────────────────────────── */}
-      {latest && d && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center">
-              Web Reputation
-              <ScorePill score={latest.webScore} status={statusFor(latest.webScore)} />
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5">
-
-            <Section title="Web Security">
-              <Check state={d.https.pass ? 'pass' : 'fail'}
-                label={`HTTPS${d.https.statusCode ? ` (${d.https.statusCode})` : ''}`}
-                href={DOCS.https} checkKey="https" />
-              {d.httpsRedirect && (
-                <Check state={d.httpsRedirect.pass ? 'pass' : 'fail'}
-                  label="HTTP→HTTPS Redirect" href={DOCS.httpsRedirect} checkKey="httpsRedirect" />
-              )}
-              {d.ssl && (
-                <Check state={sslState(d.ssl)} label={sslLabel(d.ssl)}
-                  href={DOCS.ssl} checkKey="ssl" />
-              )}
-              {d.securityHeaders && (<>
-                <Check state={d.securityHeaders.hsts ? 'pass' : 'fail'}
-                  label="HSTS" href={DOCS.hsts} checkKey="hsts" />
-                <Check state={d.securityHeaders.xContentTypeOptions ? 'pass' : 'fail'}
-                  label="X-Content-Type-Options" href={DOCS.xContentType} checkKey="xContentType" />
-                <Check state={d.securityHeaders.xFrameOptions ? 'pass' : 'fail'}
-                  label="X-Frame-Options" href={DOCS.xFrame} checkKey="xFrame" />
-                <Check state={d.securityHeaders.csp ? 'pass' : 'fail'}
-                  label="Content Security Policy (CSP)" href={DOCS.csp} checkKey="csp" />
-                <Check state={d.securityHeaders.referrerPolicy ? 'pass' : 'fail'}
-                  label="Referrer-Policy" href={DOCS.referrerPolicy} checkKey="referrerPolicy" />
-                <Check state={d.securityHeaders.permissionsPolicy ? 'pass' : 'fail'}
-                  label="Permissions-Policy" href={DOCS.permissionsPolicy} checkKey="permissionsPolicy" />
-              </>)}
-              {d.tlsVersion && (
-                <Check state={tlsVersionState(d.tlsVersion)} label={tlsVersionLabel(d.tlsVersion)}
-                  href={DOCS.tlsVersion} checkKey="tlsVersion" />
-              )}
-              {d.wwwRedirect?.exists && (
-                <Check state={d.wwwRedirect.pass ? 'pass' : 'fail'}
-                  label="www → HTTPS Redirect" href={DOCS.wwwRedirect} checkKey="wwwRedirect" />
-              )}
-            </Section>
-
-            <Section title="DNS Health">
-              {d.nsCount && (
-                <Check state={d.nsCount.pass ? 'pass' : 'fail'}
-                  label={`Nameservers (${d.nsCount.count} found, need ≥2)`}
-                  href={DOCS.ns} checkKey="ns" />
-              )}
-              {d.caa && (
-                <Check state={d.caa.pass ? 'pass' : 'fail'}
-                  label={`CAA Records${d.caa.records[0] ? ` (${d.caa.records[0]})` : ''}`}
-                  href={DOCS.caa} fixKey="caa" onFix={onFix} fixing={fixing === 'caa'} />
-              )}
-              {d.dnssec && (
-                <Check state={d.dnssec.pass ? 'pass' : 'fail'}
-                  label="DNSSEC" href={DOCS.dnssec}
-                  fixKey="dnssec" onFix={onFix} fixing={fixing === 'dnssec'} />
-              )}
-              {d.domainExpiry && (
-                <Check state={domainExpiryState(d.domainExpiry)} label={domainExpiryLabel(d.domainExpiry)}
-                  href={DOCS.domainExpiry} checkKey="domainExpiry" />
-              )}
-              {!d.nsCount && !d.caa && !d.dnssec && !d.domainExpiry && (
-                <span className="text-xs text-slate-400 italic">Not checked</span>
-              )}
-            </Section>
-
-          </CardContent>
-        </Card>
-      )}
-
-      {!latest && (
-        <Card>
-          <CardContent className="py-8 text-center text-slate-500">
-            No checks run yet. Click <strong>Run Check</strong> to get started.
-          </CardContent>
-        </Card>
       )}
 
       {/* ── Check History ───────────────────────────────────────────────── */}

@@ -102,18 +102,20 @@ export class CloudflareService {
       `/zones/${zoneId}/dns_records?type=TXT&name=${encodeURIComponent(name)}`,
     );
 
+    const quoted = `"${content}"`;
+
     if (existing.length > 0) {
       await this.cfFetch(
         token,
         `/zones/${zoneId}/dns_records/${existing[0].id}`,
         'PUT',
-        { type: 'TXT', name, content, ttl: 3600 },
+        { type: 'TXT', name, content: quoted, ttl: 3600 },
       );
     } else {
       await this.cfFetch(token, `/zones/${zoneId}/dns_records`, 'POST', {
         type: 'TXT',
         name,
-        content,
+        content: quoted,
         ttl: 3600,
       });
     }
