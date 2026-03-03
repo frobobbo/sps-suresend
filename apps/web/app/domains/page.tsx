@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Plus, Trash2, UserPlus } from 'lucide-react';
+import { Plus, Trash2, X } from 'lucide-react';
 
 function statusBadge(status?: string) {
   if (!status) return <Badge variant="outline" className="text-slate-400">Unchecked</Badge>;
@@ -64,7 +64,8 @@ export default function DomainsPage() {
         setLatestRep(Object.fromEntries(entries.filter(([, c]) => c !== undefined))),
       );
     });
-    if (user.role === 'admin') usersApi.list().then(setAllUsers);
+    // Load all users for delegation (GET /users is now open to all authenticated users)
+    usersApi.list().then(setAllUsers);
   }, [user]);
 
   async function handleAddDomain(e: React.FormEvent) {
@@ -92,6 +93,17 @@ export default function DomainsPage() {
     setTargetUserId('');
   }
 
+  async function handleRevoke(domainId: string, userId: string) {
+    await domainsApi.revokeAccess(domainId, userId);
+    setDomainList((prev) =>
+      prev.map((d) =>
+        d.id === domainId
+          ? { ...d, delegatedAccess: d.delegatedAccess.filter((a) => a.userId !== userId) }
+          : d,
+      ),
+    );
+  }
+
   async function handleDelete(id: string, name: string) {
     if (!confirm(`Delete domain "${name}"?`)) return;
     await domainsApi.remove(id);
@@ -99,6 +111,8 @@ export default function DomainsPage() {
   }
 
   if (isLoading || !user) return null;
+
+  const canManage = (d: Domain) => user.role === 'admin' || d.ownerId === user.id;
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -129,81 +143,108 @@ export default function DomainsPage() {
         </Dialog>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Domain</TableHead>
-            <TableHead>Reputation</TableHead>
-            <TableHead>Access</TableHead>
-            <TableHead>Added</TableHead>
-            <TableHead className="w-24" />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {domainList.map((d) => (
-            <TableRow key={d.id}>
-              <TableCell>
-                <Link href={`/domains/${d.id}`} className="font-medium text-[var(--sp-blue)] hover:underline">
-                  {d.name}
-                </Link>
-              </TableCell>
-              <TableCell>{statusBadge(latestRep[d.id]?.status)}</TableCell>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500">
-                    {d.delegatedAccess?.length ?? 0} delegated
-                  </span>
-                  {(user.role === 'admin' || d.ownerId === user.id) && allUsers.length > 0 && (
-                    <Dialog
-                      open={delegateOpen === d.id}
-                      onOpenChange={(o) => setDelegateOpen(o ? d.id : null)}
-                    >
-                      <DialogTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs">
-                          <UserPlus size={12} className="mr-1" /> Grant
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader><DialogTitle>Delegate access to {d.name}</DialogTitle></DialogHeader>
-                        <div className="space-y-4 mt-2">
-                          <Select value={targetUserId} onValueChange={setTargetUserId}>
-                            <SelectTrigger><SelectValue placeholder="Select user" /></SelectTrigger>
-                            <SelectContent>
-                              {allUsers
-                                .filter((u) => u.id !== d.ownerId)
-                                .map((u) => (
-                                  <SelectItem key={u.id} value={u.id}>{u.email}</SelectItem>
-                                ))}
-                            </SelectContent>
-                          </Select>
-                          <Button className="w-full" onClick={() => handleDelegate(d.id)} disabled={!targetUserId}>
-                            Grant access
-                          </Button>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell className="text-slate-500 text-sm">
-                {new Date(d.createdAt).toLocaleDateString()}
-              </TableCell>
-              <TableCell>
-                {(user.role === 'admin' || d.ownerId === user.id) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                    onClick={() => handleDelete(d.id, d.name)}
-                  >
-                    <Trash2 size={14} />
-                  </Button>
-                )}
-              </TableCell>
+      <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-slate-50">
+              <TableHead>Domain</TableHead>
+              <TableHead>Reputation</TableHead>
+              <TableHead>Delegated Access</TableHead>
+              <TableHead>Added</TableHead>
+              <TableHead className="w-12" />
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {domainList.map((d) => {
+              const grantable = allUsers.filter(
+                (u) => u.id !== d.ownerId && !d.delegatedAccess?.some((a) => a.userId === u.id),
+              );
+              return (
+                <TableRow key={d.id}>
+                  <TableCell>
+                    <Link href={`/domains/${d.id}`} className="font-medium text-[var(--sp-blue)] hover:underline">
+                      {d.name}
+                    </Link>
+                  </TableCell>
+                  <TableCell>{statusBadge(latestRep[d.id]?.status)}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {/* Delegated user chips */}
+                      {d.delegatedAccess?.map((a) => (
+                        <span
+                          key={a.userId}
+                          className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200"
+                        >
+                          {a.user?.email ?? a.userId}
+                          {canManage(d) && (
+                            <button
+                              onClick={() => handleRevoke(d.id, a.userId)}
+                              className="ml-0.5 hover:text-red-500 transition-colors"
+                              title={`Revoke access for ${a.user?.email}`}
+                            >
+                              <X size={10} />
+                            </button>
+                          )}
+                        </span>
+                      ))}
+
+                      {/* Grant button — only shown to owner/admin when there are users to grant */}
+                      {canManage(d) && grantable.length > 0 && (
+                        <Dialog
+                          open={delegateOpen === d.id}
+                          onOpenChange={(o) => { setDelegateOpen(o ? d.id : null); setTargetUserId(''); }}
+                        >
+                          <DialogTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-slate-400 hover:text-slate-700">
+                              <Plus size={11} className="mr-1" />
+                              {d.delegatedAccess?.length ? 'Add' : 'Grant access'}
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader><DialogTitle>Grant access — {d.name}</DialogTitle></DialogHeader>
+                            <div className="space-y-4 mt-2">
+                              <Select value={targetUserId} onValueChange={setTargetUserId}>
+                                <SelectTrigger><SelectValue placeholder="Select user" /></SelectTrigger>
+                                <SelectContent>
+                                  {grantable.map((u) => (
+                                    <SelectItem key={u.id} value={u.id}>{u.email}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Button className="w-full" onClick={() => handleDelegate(d.id)} disabled={!targetUserId}>
+                                Grant access
+                              </Button>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                      )}
+
+                      {!d.delegatedAccess?.length && !canManage(d) && (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-slate-500 text-sm">
+                    {new Date(d.createdAt).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell>
+                    {canManage(d) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => handleDelete(d.id, d.name)}
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

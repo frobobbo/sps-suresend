@@ -1,0 +1,251 @@
+/* ─── SureSend Admin Styles ────────────────────────────────────────────── */
+
+:root {
+	--ss-navy:   #002840;
+	--ss-sky:    #00a0e0;
+	--ss-pass:   #10b981;
+	--ss-warn:   #f59e0b;
+	--ss-fail:   #ef4444;
+	--ss-border: #e0f0f8;
+	--ss-bg:     #f5fbfe;
+}
+
+/* ── Wrapper ── */
+.ss-wrap {
+	max-width: 1100px;
+}
+
+/* ── Page header ── */
+.ss-page-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin: 0 0 20px;
+}
+
+.ss-page-title {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.ss-page-logo {
+	height: 36px;
+	width: auto;
+	display: block;
+}
+
+.ss-page-domain {
+	font-size: 20px;
+	font-weight: 700;
+	color: #1d2327;
+	line-height: 1;
+}
+
+/* Spinning animation for the dashicon during check */
+@keyframes ss-spin {
+	to { transform: rotate(360deg); }
+}
+.ss-spinning {
+	display: inline-block !important;
+	animation: ss-spin 0.8s linear infinite;
+}
+.ss-icon-hidden {
+	display: none;
+}
+
+/* ── Report layout ── */
+.ss-report {
+	display: flex;
+	gap: 24px;
+	align-items: flex-start;
+	flex-wrap: wrap;
+}
+
+/* ── Score panel ── */
+.ss-score-panel {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 10px;
+	min-width: 140px;
+	background: var(--ss-navy);
+	border-radius: 12px;
+	padding: 24px 20px;
+	color: #fff;
+}
+
+.ss-gauge-large {
+	width: 90px;
+	height: 90px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 30px;
+	font-weight: 800;
+	color: #fff;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+/* ── Dashboard widget gauge (smaller) ── */
+.ss-widget-row {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+}
+
+.ss-gauge {
+	width: 54px;
+	height: 54px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 18px;
+	font-weight: 800;
+	color: #fff;
+	flex-shrink: 0;
+}
+
+.ss-widget-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.ss-domain {
+	font-weight: 600;
+	font-size: 13px;
+	color: #1d2327;
+}
+
+.ss-date {
+	font-size: 11px;
+	color: #777;
+	margin: 0;
+}
+
+/* Date inside the dark score panel needs enough contrast */
+.ss-score-panel .ss-date {
+	color: rgba(255, 255, 255, 0.55);
+}
+
+/* ── Status badges ── */
+.ss-badge {
+	display: inline-block;
+	padding: 2px 10px;
+	border-radius: 99px;
+	font-size: 11px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+.ss-badge-clean {
+	background: rgba(16, 185, 129, 0.15);
+	color: #10b981;
+}
+.ss-badge-warning {
+	background: rgba(245, 158, 11, 0.15);
+	color: #f59e0b;
+}
+.ss-badge-blacklisted {
+	background: rgba(239, 68, 68, 0.15);
+	color: #ef4444;
+}
+.ss-badge-unknown {
+	background: rgba(107, 114, 128, 0.12);
+	color: #6b7280;
+}
+
+/* ── Checks grid ── */
+.ss-checks-grid {
+	flex: 1;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+	gap: 16px;
+	min-width: 0;
+}
+
+/* ── Section card ── */
+.ss-section {
+	background: #fff;
+	border: 1px solid var(--ss-border);
+	border-radius: 10px;
+	padding: 16px;
+	box-shadow: 0 1px 4px rgba(0, 40, 64, 0.06);
+}
+.ss-section h3 {
+	margin: 0 0 12px;
+	font-size: 12px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.07em;
+	color: var(--ss-navy);
+}
+.ss-rows {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+/* Blacklists span two columns on wider screens */
+@media (min-width: 700px) {
+	.ss-two-col {
+		grid-column: span 2;
+	}
+	.ss-two-col .ss-rows {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 6px 20px;
+	}
+}
+
+/* ── Check rows ── */
+.ss-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+	padding: 4px 6px;
+	border-radius: 6px;
+}
+.ss-row-pass { background: rgba(16, 185, 129, 0.06); }
+.ss-row-fail { background: rgba(239, 68, 68, 0.06); }
+.ss-row-warn { background: rgba(245, 158, 11, 0.06); }
+
+.ss-icon-pass  { color: var(--ss-pass) !important; }
+.ss-icon-fail  { color: var(--ss-fail) !important; }
+.ss-icon-warn  { color: var(--ss-warn) !important; }
+
+.ss-label {
+	font-weight: 600;
+	color: #1d2327;
+	flex-shrink: 0;
+}
+.ss-detail {
+	color: #6b7280;
+	font-size: 12px;
+	margin-left: auto;
+	text-align: right;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 160px;
+}
+
+/* ── Notice ── */
+#ss-notice {
+	margin: 12px 0;
+	padding: 10px 16px;
+	border-left-width: 4px;
+	border-left-style: solid;
+}
+#ss-notice.is-success {
+	border-color: var(--ss-pass);
+	background: rgba(16, 185, 129, 0.08);
+}
+#ss-notice.is-error {
+	border-color: var(--ss-fail);
+	background: rgba(239, 68, 68, 0.08);
+}

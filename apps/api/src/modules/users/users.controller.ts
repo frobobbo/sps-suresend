@@ -18,11 +18,12 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 
 @Controller('users')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin')
+@UseGuards(JwtAuthGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  // Any authenticated user can list users (needed for delegation UX).
+  // Password is always stripped.
   @Get()
   async findAll() {
     const users = await this.usersService.findAll();
@@ -30,6 +31,8 @@ export class UsersController {
   }
 
   @Post()
+  @UseGuards(RolesGuard)
+  @Roles('admin')
   async create(@Body() dto: CreateUserDto) {
     const user = await this.usersService.create(dto);
     const { password: _, ...safe } = user;
@@ -37,6 +40,8 @@ export class UsersController {
   }
 
   @Patch(':id/role')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
   async updateRole(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateUserRoleDto,
@@ -47,6 +52,8 @@ export class UsersController {
   }
 
   @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.usersService.remove(id);
