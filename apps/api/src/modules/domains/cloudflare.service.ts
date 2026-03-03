@@ -1,3 +1,4 @@
+import { promises as dns } from 'dns';
 import { BadRequestException, Injectable } from '@nestjs/common';
 
 const CF_BASE = 'https://api.cloudflare.com/client/v4';
@@ -151,6 +152,30 @@ export class CloudflareService {
     }
   }
 
+  // ── SPF record builder ───────────────────────────────────────────────────────
+
+  /**
+   * Build an SPF record appropriate for the domain's mail provider.
+   * Detects Google Workspace or Microsoft 365 from MX records and includes
+   * the provider's canonical SPF mechanism instead of a generic `mx` lookup.
+   */
+  private async buildSpfRecord(domain: string): Promise<string> {
+    try {
+      const records = await dns.resolveMx(domain);
+      for (const { exchange } of records) {
+        if (/google|gmail/i.test(exchange)) {
+          return 'v=spf1 include:_spf.google.com ~all';
+        }
+        if (/outlook\.com|protection\.outlook/i.test(exchange)) {
+          return 'v=spf1 include:spf.protection.outlook.com ~all';
+        }
+      }
+    } catch {
+      // Fall through to generic record
+    }
+    return 'v=spf1 mx ~all';
+  }
+
   // ── Public: apply fix ────────────────────────────────────────────────────────
 
   async applyFix(
@@ -163,7 +188,7 @@ export class CloudflareService {
 
     switch (check) {
       case 'spf': {
-        const content = 'v=spf1 mx ~all';
+        const content = await this.buildSpfRecord(domain);
         await this.upsertTxtRecord(token, zoneId, domain, content);
         return { record: content, action: 'TXT record upserted at ' + domain };
       }
