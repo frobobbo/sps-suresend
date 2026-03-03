@@ -77,6 +77,9 @@ export function Nav() {
           <LogOut size={16} />
           Sign out
         </Button>
+        <div className="text-right px-1 mt-2 text-[10px]" style={{ color: 'oklch(0.38 0.02 228)' }}>
+          v1.2.1
+        </div>
       </div>
     </aside>
   );
