@@ -310,9 +310,10 @@ export class ReputationService implements OnModuleInit {
       const req = https.get(
         { hostname: domain, path: '/', timeout: 5000 },
         (res) => {
+          // Reaching here means Node.js already verified the TLS cert
+          // (hostname, chain of trust, expiry). SSL is valid — read metadata for display only.
           let daysUntilExpiry: number | null = null;
           let expiresAt: string | null = null;
-          let sslPass = false;
           let protocol: string | null = null;
           try {
             const sock = res.socket as tls.TLSSocket;
@@ -320,14 +321,15 @@ export class ReputationService implements OnModuleInit {
             const cert = sock.getPeerCertificate();
             if (cert?.valid_to) {
               const expiry = new Date(cert.valid_to);
-              daysUntilExpiry = Math.floor((expiry.getTime() - Date.now()) / 86_400_000);
-              expiresAt = expiry.toISOString();
-              sslPass = daysUntilExpiry > 0;
+              if (!isNaN(expiry.getTime())) {
+                daysUntilExpiry = Math.floor((expiry.getTime() - Date.now()) / 86_400_000);
+                expiresAt = expiry.toISOString();
+              }
             }
-          } catch { /* cert unavailable */ }
+          } catch { /* cert metadata unavailable — TLS still valid */ }
           resolve({
             https: { pass: true, statusCode: res.statusCode ?? null },
-            ssl: { pass: sslPass, daysUntilExpiry, expiresAt },
+            ssl: { pass: true, daysUntilExpiry, expiresAt },
             securityHeaders: {
               hsts: !!res.headers['strict-transport-security'],
               xContentTypeOptions: String(res.headers['x-content-type-options'] ?? '').toLowerCase().includes('nosniff'),
