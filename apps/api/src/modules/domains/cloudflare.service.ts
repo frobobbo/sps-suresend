@@ -201,6 +201,14 @@ export class CloudflareService {
         return { record: 'status=active', action: `DNSSEC enabled for zone ${domain}` };
       }
 
+      case 'bimi': {
+        const logoUrl = payload?.logoUrl as string | undefined;
+        if (!logoUrl) throw new BadRequestException('logoUrl is required for bimi fix');
+        const content = `v=BIMI1; l=${logoUrl}`;
+        await this.upsertTxtRecord(token, zoneId, `default._bimi.${domain}`, content);
+        return { record: content, action: `TXT record upserted at default._bimi.${domain}` };
+      }
+
       case 'dkim-google': {
         const record = payload?.record as string | undefined;
         const selector = (payload?.selector as string | undefined) || 'google';

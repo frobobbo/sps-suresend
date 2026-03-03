@@ -419,6 +419,70 @@ function DkimFixDialog({
   );
 }
 
+function BimiFixDialog({
+  open, onClose, domainName, onSubmit, submitting,
+}: {
+  open: boolean;
+  onClose: () => void;
+  domainName: string;
+  onSubmit: (payload: unknown) => Promise<void>;
+  submitting: boolean;
+}) {
+  const [logoUrl, setLogoUrl] = useState('');
+  const [err, setErr] = useState('');
+
+  const previewRecord = logoUrl.trim() ? `v=BIMI1; l=${logoUrl.trim()}` : null;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr('');
+    try {
+      await onSubmit({ logoUrl: logoUrl.trim() });
+      onClose();
+    } catch (ex: any) {
+      setErr(ex.message ?? 'Failed to publish BIMI record');
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Set up BIMI Brand Logo</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+          <div className="text-sm text-slate-600 space-y-1">
+            <p>BIMI displays your brand logo next to emails in supporting clients (Gmail, Apple Mail).</p>
+            <p className="text-xs text-slate-400">You need a square SVG logo hosted at a public HTTPS URL. The logo must meet the <a href="https://bimigroup.org/taking-bimi-one-step-further/" target="_blank" rel="noopener noreferrer" className="text-sky-600 hover:underline">BIMI spec</a> (square, no embedded fonts).</p>
+          </div>
+          <div className="space-y-2">
+            <Label>Logo URL (SVG)</Label>
+            <Input
+              value={logoUrl}
+              onChange={(e) => setLogoUrl(e.target.value)}
+              placeholder="https://example.com/logo.svg"
+              required
+              type="url"
+            />
+          </div>
+          {previewRecord && (
+            <div className="rounded-md bg-slate-50 p-3 space-y-1.5">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Record to be created</p>
+              <p className="text-[11px] font-mono text-slate-500">default._bimi.{domainName}</p>
+              <p className="text-[11px] font-mono text-slate-700 break-all">{previewRecord}</p>
+            </div>
+          )}
+          {err && <Alert variant="destructive"><AlertDescription>{err}</AlertDescription></Alert>}
+          <Button type="submit" className="w-full" disabled={submitting || !logoUrl.trim()}>
+            {submitting && <Loader2 size={14} className="mr-2 animate-spin" />}
+            Publish to Cloudflare
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function spfLabel(spf: ReputationCheck['details']['spf']): string {
   if (!spf.pass) return 'SPF Record';
   const map: Record<string, string> = {
@@ -502,6 +566,7 @@ export default function DomainDetailPage() {
   const [cfSaving, setCfSaving] = useState(false);
   const [cfError, setCfError] = useState('');
   const [dkimDialogOpen, setDkimDialogOpen] = useState(false);
+  const [bimiDialogOpen, setBimiDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !user) router.replace('/login');
@@ -644,7 +709,8 @@ export default function DomainDetailPage() {
         (!d.spf.pass || !d.dmarc.pass ||
           (d.mtaSts && !d.mtaSts.pass) || (d.tlsRpt && !d.tlsRpt.pass) ||
           (d.caa && !d.caa.pass) || (d.dnssec && !d.dnssec.pass) ||
-          (d.mx.mailProvider && !d.dkim.pass)) && (
+          (d.mx.mailProvider && !d.dkim.pass) ||
+          (d.bimi && !d.bimi.pass)) && (
           <Alert className="border-sky-200 bg-sky-50 text-sky-800">
             <AlertDescription className="flex items-center gap-2">
               <Wrench size={14} className="shrink-0" />
@@ -760,8 +826,24 @@ export default function DomainDetailPage() {
                     href={DOCS.tlsRpt} fixKey="tlsRpt" onFix={onFix} fixing={fixing === 'tlsRpt'} />
                 ) : null}
                 {d.bimi ? (
-                  <Check state={d.bimi.pass ? 'pass' : 'fail'}
-                    label="BIMI (Brand Logo in Email)" href={DOCS.bimi} checkKey="bimi" />
+                  !d.bimi.pass && domain.cloudflareConnected && canManage ? (
+                    <div className="flex items-center gap-2 text-sm rounded-md px-1.5 -mx-1.5 hover:bg-slate-50 transition-colors">
+                      <XCircle size={15} className="text-red-400 shrink-0" />
+                      <span className="flex-1 text-slate-500">BIMI (Brand Logo in Email)</span>
+                      {HELP.bimi?.fail && <HelpPopover help={HELP.bimi.fail} href={DOCS.bimi} />}
+                      <button
+                        onClick={() => setBimiDialogOpen(true)}
+                        disabled={fixing === 'bimi'}
+                        className="shrink-0 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border border-sky-200 bg-sky-50 text-sky-600 hover:bg-sky-100 font-medium transition-colors disabled:opacity-50"
+                      >
+                        {fixing === 'bimi' ? <Loader2 size={10} className="animate-spin" /> : <Wrench size={10} />}
+                        Setup
+                      </button>
+                    </div>
+                  ) : (
+                    <Check state={d.bimi.pass ? 'pass' : 'fail'}
+                      label="BIMI (Brand Logo in Email)" href={DOCS.bimi} checkKey="bimi" />
+                  )
                 ) : null}
                 {!d.mtaSts && !d.tlsRpt && !d.bimi && (
                   <span className="text-xs text-slate-400 italic">Not checked</span>
@@ -885,7 +967,7 @@ export default function DomainDetailPage() {
         </Card>
       )}
 
-      {/* DKIM setup dialog — rendered outside the grid so it can overlay correctly */}
+      {/* Dialogs — rendered outside the grid so they can overlay correctly */}
       {latest && d && d.mx.mailProvider && (
         <DkimFixDialog
           open={dkimDialogOpen}
@@ -897,6 +979,15 @@ export default function DomainDetailPage() {
             const check = d.mx.mailProvider === 'google' ? 'dkim-google' : 'dkim-microsoft';
             await handleFix(check, payload);
           }}
+        />
+      )}
+      {latest && d && d.bimi && !d.bimi.pass && domain.cloudflareConnected && canManage && (
+        <BimiFixDialog
+          open={bimiDialogOpen}
+          onClose={() => setBimiDialogOpen(false)}
+          domainName={domain.name}
+          submitting={fixing === 'bimi'}
+          onSubmit={async (payload) => { await handleFix('bimi', payload); }}
         />
       )}
 
