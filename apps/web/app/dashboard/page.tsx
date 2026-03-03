@@ -45,7 +45,7 @@ export default function DashboardPage() {
   const counts = {
     clean: repValues.filter((c) => c?.status === 'clean').length,
     warning: repValues.filter((c) => c?.status === 'warning').length,
-    blacklisted: repValues.filter((c) => c?.status === 'blacklisted').length,
+    critical: repValues.filter((c) => c?.status === 'critical').length,
     unchecked: domainList.length - repValues.length,
   };
 
@@ -58,7 +58,7 @@ export default function DashboardPage() {
           { label: 'Total Domains', value: domainList.length, icon: Globe, color: 'text-[var(--sp-blue)]' },
           { label: 'Clean', value: counts.clean, icon: ShieldCheck, color: 'text-emerald-600' },
           { label: 'Warning', value: counts.warning, icon: ShieldAlert, color: 'text-amber-600' },
-          { label: 'Blacklisted', value: counts.blacklisted, icon: ShieldX, color: 'text-red-600' },
+          { label: 'Critical', value: counts.critical, icon: ShieldX, color: 'text-red-600' },
         ].map(({ label, value, icon: Icon, color }) => (
           <Card key={label}>
             <CardHeader className="pb-2">

@@ -472,13 +472,13 @@ export class ReputationService implements OnModuleInit {
     score: number;
     emailScore: number;
     webScore: number;
-    status: 'clean' | 'warning' | 'blacklisted';
+    status: 'clean' | 'warning' | 'critical';
   } {
     const emailScore = this.calcEmailScore(details);
     const webScore = this.calcWebScore(details);
     // Overall: email weighted 60%, web 40% (email deliverability is the product's core focus)
     const score = Math.max(0, Math.round(emailScore * 0.6 + webScore * 0.4));
-    const status = score >= 80 ? 'clean' : score >= 50 ? 'warning' : 'blacklisted';
+    const status = score >= 80 ? 'clean' : score >= 50 ? 'warning' : 'critical';
     return { score, emailScore, webScore, status };
   }
 }

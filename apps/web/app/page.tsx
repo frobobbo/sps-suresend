@@ -235,7 +235,7 @@ export default function LandingPage() {
                 {[
                   { label: 'Clean', range: '80–100', color: '#10b981' },
                   { label: 'Warning', range: '50–79', color: '#f59e0b' },
-                  { label: 'Blacklisted', range: '0–49', color: '#ef4444' },
+                  { label: 'Critical', range: '0–49', color: '#ef4444' },
                 ].map(({ label, range, color }) => (
                   <div
                     key={label}

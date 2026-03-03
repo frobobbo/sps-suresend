@@ -156,7 +156,7 @@ export interface ReputationCheck {
   score: number;
   emailScore: number;
   webScore: number;
-  status: 'clean' | 'warning' | 'blacklisted';
+  status: 'clean' | 'warning' | 'critical';
   details: {
     mx: { pass: boolean; records: string[] };
     spf: { pass: boolean; record: string | null; policy?: 'hard_fail' | 'soft_fail' | 'permissive' | 'pass_all' };

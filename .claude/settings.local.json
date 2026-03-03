@@ -37,11 +37,25 @@
       "Bash(ln -sf \"$PNPM\" /tmp/pnpm)",
       "Bash(export PATH=\"/tmp:$PATH\")",
       "Bash(npm exec -- pnpm --filter web add shadcn)",
-      "Bash(git add apps/web/app/api/[...path]/route.ts apps/web/lib/api.ts apps/api/src/seed/seed.service.ts apps/api/src/seed/seed.module.ts apps/api/src/app.module.ts apps/api/.env.example docker-compose.yml helm/suresend/templates/configmap.yaml helm/suresend/templates/deployment-web.yaml helm/suresend/templates/secret.yaml helm/suresend/values.yaml)"
+      "Bash(git add apps/web/app/api/[...path]/route.ts apps/web/lib/api.ts apps/api/src/seed/seed.service.ts apps/api/src/seed/seed.module.ts apps/api/src/app.module.ts apps/api/.env.example docker-compose.yml helm/suresend/templates/configmap.yaml helm/suresend/templates/deployment-web.yaml helm/suresend/templates/secret.yaml helm/suresend/values.yaml)",
+      "Bash(git add config/unbound.conf apps/api/src/modules/reputation/reputation.service.ts docker-compose.yml helm/suresend/values.yaml helm/suresend/templates/configmap.yaml helm/suresend/templates/configmap-unbound.yaml helm/suresend/templates/deployment-unbound.yaml helm/suresend/templates/service-unbound.yaml helm/suresend/templates/NOTES.txt)",
+      "Bash(python3 -c \" from PIL import Image import sys img = Image.open\\(''/home/brett/Documents/projects/sps-suresend/images/SureSendLogo.png''\\).convert\\(''RGBA''\\) print\\(f''Size: {img.size}, Mode: {img.mode}''\\) # Get color frequency from collections import Counter pixels = list\\(img.getdata\\(\\)\\) # Filter out transparent pixels opaque = [\\(r,g,b\\) for r,g,b,a in pixels if a > 128] # Quantize to reduce noise quantized = [\\(r//16*16, g//16*16, b//16*16\\) for r,g,b in opaque] counter = Counter\\(quantized\\) print\\(''Top 20 colors \\(RGB\\):''\\) for color, count in counter.most_common\\(20\\): pct = count/len\\(opaque\\)*100 print\\(f'' rgb{color} = #{color[0]:02x}{color[1]:02x}{color[2]:02x} \\({pct:.1f}%\\)''\\) \")",
+      "Bash(git add helm/suresend/Chart.yaml helm/suresend/values.yaml helm/suresend/templates/configmap-unbound.yaml helm/suresend/templates/deployment-unbound.yaml config/unbound.conf docker-compose.yml apps/web/app/globals.css apps/web/app/layout.tsx apps/web/app/login/page.tsx apps/web/components/nav.tsx apps/web/public/)",
+      "Bash(git -C /home/brett/Documents/projects/sps-suresend push)",
+      "Bash(gh run list --repo frobobbo/sps-suresend --workflow helm-release.yml --limit 3)",
+      "Bash(git -C /home/brett/Documents/projects/sps-suresend fetch origin gh-pages git -C /home/brett/Documents/projects/sps-suresend show origin/gh-pages:index.yaml)",
+      "Bash(git -C /home/brett/Documents/projects/sps-suresend ls-tree origin/gh-pages)",
+      "Bash(git -C /home/brett/Documents/projects/sps-suresend fetch origin gh-pages:gh-pages)",
+      "Bash(git -C /home/brett/Documents/projects/sps-suresend ls-tree gh-pages)",
+      "Bash(git -C /home/brett/Documents/projects/sps-suresend show gh-pages:index.yaml)",
+      "Bash(curl -s \"https://registry.hub.docker.com/v2/repositories/mvance/unbound/tags?page_size=10\")",
+      "Bash(python3 -c \"import json,sys; [print\\(t[''name'']\\) for t in json.load\\(sys.stdin\\).get\\(''results'',[]\\)]\")",
+      "Bash(git add apps/api/src/modules/domains/ apps/web/lib/api.ts \"apps/web/app/domains/[id]/page.tsx\")"
     ],
     "additionalDirectories": [
       "/home/brett/Documents/projects/sps-suresend/apps/api/src",
-      "/home/brett/Documents/projects/sps-suresend/apps/web/app/domains"
+      "/home/brett/Documents/projects/sps-suresend/apps/web/app/domains",
+      "/home/brett/Documents/projects/sps-suresend/apps/web/app/domains/[id]"
     ]
   }
 }

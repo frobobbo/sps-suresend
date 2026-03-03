@@ -127,8 +127,8 @@ const HELP: Record<string, Partial<Record<CheckState | 'blocked', string>>> = {
 
 const FIXABLE = new Set(['spf', 'dmarc', 'mtaSts', 'tlsRpt', 'caa']);
 
-function statusFor(score: number): 'clean' | 'warning' | 'blacklisted' {
-  return score >= 80 ? 'clean' : score >= 50 ? 'warning' : 'blacklisted';
+function statusFor(score: number): 'clean' | 'warning' | 'critical' {
+  return score >= 80 ? 'clean' : score >= 50 ? 'warning' : 'critical';
 }
 
 function HelpPopover({ help, href }: { help: string; href?: string }) {
@@ -229,7 +229,7 @@ function ScoreGauge({
   score, status, size = 'md', label,
 }: {
   score: number;
-  status: 'clean' | 'warning' | 'blacklisted';
+  status: 'clean' | 'warning' | 'critical';
   size?: 'sm' | 'md' | 'lg';
   label?: string;
 }) {
@@ -252,7 +252,7 @@ function ScoreGauge({
 }
 
 // Compact inline score badge used in card headers
-function ScorePill({ score, status }: { score: number; status: 'clean' | 'warning' | 'blacklisted' }) {
+function ScorePill({ score, status }: { score: number; status: 'clean' | 'warning' | 'critical' }) {
   const cls =
     status === 'clean' ? 'bg-emerald-100 text-emerald-700'
     : status === 'warning' ? 'bg-amber-100 text-amber-700'
@@ -473,11 +473,24 @@ export default function DomainDetailPage() {
               <span className="text-xs text-slate-400 font-normal">{new Date(latest.checkedAt).toLocaleString()}</span>
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <div className="flex items-end justify-around py-2">
               <ScoreGauge score={latest.emailScore} status={statusFor(latest.emailScore)} size="md" label="Email" />
               <ScoreGauge score={latest.score} status={latest.status} size="lg" label="Overall" />
               <ScoreGauge score={latest.webScore} status={statusFor(latest.webScore)} size="md" label="Web" />
+            </div>
+            {/* Score key */}
+            <div className="flex gap-2 pt-1 border-t border-slate-100">
+              {([
+                { label: 'Clean', range: '80–100', color: '#10b981', bg: '#10b98118' },
+                { label: 'Warning', range: '50–79', color: '#f59e0b', bg: '#f59e0b18' },
+                { label: 'Critical', range: '0–49', color: '#ef4444', bg: '#ef444418' },
+              ] as const).map(({ label, range, color, bg }) => (
+                <div key={label} className="flex-1 rounded-md px-2 py-1.5 text-center" style={{ background: bg }}>
+                  <p className="text-[11px] font-bold" style={{ color }}>{label}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{range}</p>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

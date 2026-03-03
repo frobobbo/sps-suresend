@@ -30,7 +30,7 @@ export class ReputationCheck {
   webScore!: number;
 
   @Column({ type: 'varchar' })
-  status!: 'clean' | 'warning' | 'blacklisted';
+  status!: 'clean' | 'warning' | 'critical';
 
   @Column({ type: 'jsonb' })
   details!: unknown;

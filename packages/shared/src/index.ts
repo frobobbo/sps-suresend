@@ -81,7 +81,7 @@ export type DelegateAccessPayload = z.infer<typeof delegateAccessSchema>;
 
 // ─── Reputation ───────────────────────────────────────────────────────────────
 
-export const reputationStatusSchema = z.enum(['clean', 'warning', 'blacklisted']);
+export const reputationStatusSchema = z.enum(['clean', 'warning', 'critical']);
 
 export const reputationCheckSchema = z.object({
   id: z.string().uuid(),
