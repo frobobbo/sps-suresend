@@ -63,6 +63,32 @@ export class CloudflareService {
     return zoneId;
   }
 
+  // ── CNAME record upsert ──────────────────────────────────────────────────────
+
+  private async upsertCnameRecord(
+    token: string,
+    zoneId: string,
+    name: string,
+    content: string,
+  ): Promise<void> {
+    const existing = await this.cfFetch<CfRecord[]>(
+      token,
+      `/zones/${zoneId}/dns_records?type=CNAME&name=${encodeURIComponent(name)}`,
+    );
+    if (existing.length > 0) {
+      await this.cfFetch(
+        token,
+        `/zones/${zoneId}/dns_records/${existing[0].id}`,
+        'PUT',
+        { type: 'CNAME', name, content, ttl: 3600, proxied: false },
+      );
+    } else {
+      await this.cfFetch(token, `/zones/${zoneId}/dns_records`, 'POST', {
+        type: 'CNAME', name, content, ttl: 3600, proxied: false,
+      });
+    }
+  }
+
   // ── TXT record upsert ────────────────────────────────────────────────────────
 
   private async upsertTxtRecord(
@@ -129,6 +155,7 @@ export class CloudflareService {
     token: string,
     domain: string,
     check: string,
+    payload?: Record<string, unknown>,
   ): Promise<{ record: string; action: string }> {
     const zoneId = await this.validateToken(token, domain);
 
@@ -170,6 +197,31 @@ export class CloudflareService {
       case 'dnssec': {
         await this.cfFetch(token, `/zones/${zoneId}/dnssec`, 'PATCH', { status: 'active' });
         return { record: 'status=active', action: `DNSSEC enabled for zone ${domain}` };
+      }
+
+      case 'dkim-google': {
+        const record = payload?.record as string | undefined;
+        const selector = (payload?.selector as string | undefined) || 'google';
+        if (!record) throw new BadRequestException('record is required for dkim-google fix');
+        await this.upsertTxtRecord(token, zoneId, `${selector}._domainkey.${domain}`, record);
+        return { record, action: `TXT record created at ${selector}._domainkey.${domain}` };
+      }
+
+      case 'dkim-microsoft': {
+        const tenantDomain = payload?.tenantDomain as string | undefined;
+        if (!tenantDomain) throw new BadRequestException('tenantDomain is required for dkim-microsoft fix');
+        const subdomain = domain.replace(/\./g, '-');
+        const created: string[] = [];
+        for (const sel of ['selector1', 'selector2']) {
+          const name = `${sel}._domainkey.${domain}`;
+          const content = `${sel}-${subdomain}._domainkey.${tenantDomain}`;
+          await this.upsertCnameRecord(token, zoneId, name, content);
+          created.push(`${name} → ${content}`);
+        }
+        return {
+          record: created.join(' | '),
+          action: `CNAME records created at selector1 and selector2._domainkey.${domain}`,
+        };
       }
 
       default:

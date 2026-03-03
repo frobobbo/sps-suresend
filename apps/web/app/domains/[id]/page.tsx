@@ -308,6 +308,109 @@ function ScorePill({ score, status }: { score: number; status: 'clean' | 'warnin
   );
 }
 
+function DkimFixDialog({
+  open, onClose, provider, domainName, onSubmit, submitting,
+}: {
+  open: boolean;
+  onClose: () => void;
+  provider: 'google' | 'microsoft';
+  domainName: string;
+  onSubmit: (payload: unknown) => Promise<void>;
+  submitting: boolean;
+}) {
+  const [selector, setSelector] = useState('google');
+  const [record, setRecord] = useState('');
+  const [tenantDomain, setTenantDomain] = useState('');
+  const [err, setErr] = useState('');
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr('');
+    try {
+      if (provider === 'google') {
+        await onSubmit({ record: record.trim(), selector: selector.trim() || 'google' });
+      } else {
+        await onSubmit({ tenantDomain: tenantDomain.trim() });
+      }
+      onClose();
+    } catch (ex: any) {
+      setErr(ex.message ?? 'Failed to publish DKIM records');
+    }
+  }
+
+  const msSubdomain = domainName.replace(/\./g, '-');
+  const msCnames = tenantDomain.trim() ? [
+    `selector1._domainkey.${domainName} → selector1-${msSubdomain}._domainkey.${tenantDomain.trim()}`,
+    `selector2._domainkey.${domainName} → selector2-${msSubdomain}._domainkey.${tenantDomain.trim()}`,
+  ] : null;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            Set up DKIM — {provider === 'google' ? 'Google Workspace' : 'Microsoft 365'}
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+          {provider === 'google' ? (<>
+            <div className="text-sm text-slate-600 space-y-2">
+              <p>Generate your DKIM key in Google Admin, then paste the record value below.</p>
+              <ol className="list-decimal list-inside space-y-0.5 text-xs text-slate-500">
+                <li>Open <a href="https://admin.google.com" target="_blank" rel="noopener noreferrer" className="text-sky-600 hover:underline">Google Admin Console</a></li>
+                <li>Apps → Google Workspace → Gmail → Authenticate email</li>
+                <li>Select <strong>{domainName}</strong> and generate or view the DKIM key</li>
+                <li>Copy the full TXT record value shown by Google</li>
+              </ol>
+            </div>
+            <div className="space-y-2">
+              <Label>Selector</Label>
+              <Input value={selector} onChange={(e) => setSelector(e.target.value)} placeholder="google" />
+            </div>
+            <div className="space-y-2">
+              <Label>TXT Record Value</Label>
+              <textarea
+                value={record}
+                onChange={(e) => setRecord(e.target.value)}
+                placeholder="v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0B..."
+                required
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono text-slate-700 placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring min-h-[80px] resize-y"
+              />
+            </div>
+          </>) : (<>
+            <p className="text-sm text-slate-600">
+              Microsoft 365 DKIM uses CNAME records pointing to Microsoft's signing infrastructure.
+              Enter your tenant domain and we'll create both records automatically.
+            </p>
+            <div className="space-y-2">
+              <Label>Microsoft 365 Tenant Domain</Label>
+              <Input
+                value={tenantDomain}
+                onChange={(e) => setTenantDomain(e.target.value)}
+                placeholder="contoso.onmicrosoft.com"
+                required
+              />
+            </div>
+            {msCnames && (
+              <div className="rounded-md bg-slate-50 p-3 space-y-1.5">
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Records to be created</p>
+                {msCnames.map((c) => (
+                  <p key={c} className="text-[11px] font-mono text-slate-600 break-all">{c}</p>
+                ))}
+              </div>
+            )}
+          </>)}
+          {err && <Alert variant="destructive"><AlertDescription>{err}</AlertDescription></Alert>}
+          <Button type="submit" className="w-full" disabled={submitting}>
+            {submitting && <Loader2 size={14} className="mr-2 animate-spin" />}
+            Publish to Cloudflare
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function spfLabel(spf: ReputationCheck['details']['spf']): string {
   if (!spf.pass) return 'SPF Record';
   const map: Record<string, string> = {
@@ -390,6 +493,7 @@ export default function DomainDetailPage() {
   const [cfToken, setCfToken] = useState('');
   const [cfSaving, setCfSaving] = useState(false);
   const [cfError, setCfError] = useState('');
+  const [dkimDialogOpen, setDkimDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !user) router.replace('/login');
@@ -411,17 +515,18 @@ export default function DomainDetailPage() {
     }
   }
 
-  async function handleFix(check: string) {
+  async function handleFix(check: string, payload?: unknown) {
     setFixing(check);
     setFixResult(null);
     setFixError(null);
     try {
-      const result = await domainsApi.fixCheck(id, check);
+      const result = await domainsApi.fixCheck(id, check, payload);
       setFixResult(result);
       const fresh = await repApi.runCheck(id);
       setChecks((prev) => [fresh, ...prev]);
     } catch (err: any) {
       setFixError(err.message ?? 'Fix failed');
+      throw err;
     } finally {
       setFixing(null);
     }
@@ -530,7 +635,8 @@ export default function DomainDetailPage() {
       {!domain.cloudflareConnected && canManage && d && (
         (!d.spf.pass || !d.dmarc.pass ||
           (d.mtaSts && !d.mtaSts.pass) || (d.tlsRpt && !d.tlsRpt.pass) ||
-          (d.caa && !d.caa.pass) || (d.dnssec && !d.dnssec.pass)) && (
+          (d.caa && !d.caa.pass) || (d.dnssec && !d.dnssec.pass) ||
+          (d.mx.mailProvider && !d.dkim.pass)) && (
           <Alert className="border-sky-200 bg-sky-50 text-sky-800">
             <AlertDescription className="flex items-center gap-2">
               <Wrench size={14} className="shrink-0" />
@@ -583,6 +689,20 @@ export default function DomainDetailPage() {
           </CardHeader>
           <CardContent className="space-y-5">
 
+            {d.mx.mailProvider && (
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span className="text-xs text-slate-500">
+                  Mail hosted by{' '}
+                  <span className="font-semibold text-slate-700">
+                    {d.mx.mailProvider === 'google' ? 'Google Workspace' : 'Microsoft 365'}
+                  </span>
+                </span>
+                {!d.dkim.pass && !domain.cloudflareConnected && canManage && (
+                  <span className="text-[11px] text-sky-600">Connect Cloudflare to auto-fix DKIM</span>
+                )}
+              </div>
+            )}
+
             <Section title="Authentication">
               <Check state={d.mx.pass ? 'pass' : 'fail'}
                 label={`MX Records${d.mx.records[0] ? ` (${d.mx.records[0]})` : ''}`}
@@ -591,9 +711,27 @@ export default function DomainDetailPage() {
                 fixKey="spf" onFix={onFix} fixing={fixing === 'spf'} />
               <Check state={dmarcState(d.dmarc)} label={dmarcLabel(d.dmarc)} href={DOCS.dmarc}
                 fixKey="dmarc" onFix={onFix} fixing={fixing === 'dmarc'} />
-              <Check state={d.dkim.pass ? 'pass' : 'fail'}
-                label={`DKIM${d.dkim.selector ? ` (${d.dkim.selector})` : ''}`}
-                href={DOCS.dkim} checkKey="dkim" />
+              {!d.dkim.pass && d.mx.mailProvider && domain.cloudflareConnected && canManage ? (
+                <div className="flex items-center gap-2 text-sm">
+                  <XCircle size={15} className="text-red-400 shrink-0" />
+                  <span className="flex-1 text-slate-500">DKIM</span>
+                  {HELP.dkim?.fail && <HelpPopover help={HELP.dkim.fail} href={DOCS.dkim} />}
+                  <button
+                    onClick={() => setDkimDialogOpen(true)}
+                    disabled={fixing === 'dkim-google' || fixing === 'dkim-microsoft'}
+                    className="shrink-0 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border border-sky-200 bg-sky-50 text-sky-600 hover:bg-sky-100 font-medium transition-colors disabled:opacity-50"
+                  >
+                    {(fixing === 'dkim-google' || fixing === 'dkim-microsoft')
+                      ? <Loader2 size={10} className="animate-spin" />
+                      : <Wrench size={10} />}
+                    Setup
+                  </button>
+                </div>
+              ) : (
+                <Check state={d.dkim.pass ? 'pass' : 'fail'}
+                  label={`DKIM${d.dkim.selector ? ` (${d.dkim.selector})` : ''}`}
+                  href={DOCS.dkim} checkKey="dkim" />
+              )}
               {d.spf.lookups !== undefined && (
                 <Check state={spfLookupsState(d.spf)} label={spfLookupsLabel(d.spf)}
                   href={DOCS.spfLookups} checkKey="spfLookups" />
@@ -652,6 +790,21 @@ export default function DomainDetailPage() {
 
           </CardContent>
         </Card>
+      )}
+
+      {/* DKIM setup dialog — rendered outside the card so it can overlay correctly */}
+      {latest && d && d.mx.mailProvider && (
+        <DkimFixDialog
+          open={dkimDialogOpen}
+          onClose={() => setDkimDialogOpen(false)}
+          provider={d.mx.mailProvider}
+          domainName={domain.name}
+          submitting={fixing === 'dkim-google' || fixing === 'dkim-microsoft'}
+          onSubmit={async (payload) => {
+            const check = d.mx.mailProvider === 'google' ? 'dkim-google' : 'dkim-microsoft';
+            await handleFix(check, payload);
+          }}
+        />
       )}
 
       {/* ── Web Reputation ──────────────────────────────────────────────── */}

@@ -142,6 +142,7 @@ export class DomainsService {
     id: string,
     check: string,
     user: RequestUser,
+    payload?: Record<string, unknown>,
   ): Promise<{ record: string; action: string }> {
     // Explicitly select cloudflareToken (excluded by default)
     const domain = await this.domainRepo
@@ -157,7 +158,7 @@ export class DomainsService {
       throw new BadRequestException('No Cloudflare token configured for this domain');
     }
 
-    return this.cloudflareService.applyFix(domain.cloudflareToken, domain.name, check);
+    return this.cloudflareService.applyFix(domain.cloudflareToken, domain.name, check, payload);
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────

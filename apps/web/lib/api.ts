@@ -107,9 +107,10 @@ export const domains = {
   disconnectCloudflare: (domainId: string) =>
     apiFetch<void>(`/domains/${domainId}/cloudflare`, { method: 'DELETE' }),
 
-  fixCheck: (domainId: string, check: string) =>
+  fixCheck: (domainId: string, check: string, payload?: unknown) =>
     apiFetch<{ record: string; action: string }>(`/domains/${domainId}/fix/${check}`, {
       method: 'POST',
+      body: payload ? JSON.stringify(payload) : undefined,
     }),
 };
 
@@ -158,7 +159,7 @@ export interface ReputationCheck {
   webScore: number;
   status: 'clean' | 'warning' | 'critical';
   details: {
-    mx: { pass: boolean; records: string[] };
+    mx: { pass: boolean; records: string[]; mailProvider?: 'google' | 'microsoft' };
     spf: { pass: boolean; record: string | null; policy?: 'hard_fail' | 'soft_fail' | 'permissive' | 'pass_all'; lookups?: number };
     dmarc: { pass: boolean; record: string | null; policy?: 'reject' | 'quarantine' | 'none'; hasRua?: boolean; hasRuf?: boolean; pct?: number };
     dkim: { pass: boolean; selector: string | null };

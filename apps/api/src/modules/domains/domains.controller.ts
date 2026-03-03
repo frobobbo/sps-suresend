@@ -95,8 +95,9 @@ export class DomainsController {
   applyFix(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('check') check: string,
+    @Body() payload: Record<string, unknown>,
     @CurrentUser() user: any,
   ) {
-    return this.domainsService.applyFix(id, check, user);
+    return this.domainsService.applyFix(id, check, user, payload);
   }
 }

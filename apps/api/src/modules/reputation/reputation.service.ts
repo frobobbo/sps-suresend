@@ -35,7 +35,7 @@ interface BlacklistResult {
 }
 
 interface CheckDetails {
-  mx: { pass: boolean; records: string[] };
+  mx: { pass: boolean; records: string[]; mailProvider?: 'google' | 'microsoft' };
   spf: {
     pass: boolean;
     record: string | null;
@@ -186,7 +186,12 @@ export class ReputationService implements OnModuleInit {
     try {
       const records = await this.dnsClient.resolveMx(domain);
       const exchanges = records.map((r) => r.exchange);
-      return { pass: exchanges.length > 0, records: exchanges };
+      let mailProvider: 'google' | 'microsoft' | undefined;
+      for (const ex of exchanges) {
+        if (/google|gmail/i.test(ex)) { mailProvider = 'google'; break; }
+        if (/outlook\.com|protection\.outlook/i.test(ex)) { mailProvider = 'microsoft'; break; }
+      }
+      return { pass: exchanges.length > 0, records: exchanges, mailProvider };
     } catch {
       return { pass: false, records: [] };
     }
