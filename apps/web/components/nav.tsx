@@ -26,7 +26,7 @@ export function Nav() {
   const items = user.role === 'admin' ? [...NAV_ITEMS, ...ADMIN_ITEMS] : NAV_ITEMS;
 
   return (
-    <aside className="w-56 min-h-screen flex flex-col" style={{ background: 'var(--sp-navy)' }}>
+    <aside className="w-56 h-screen sticky top-0 flex-shrink-0 flex flex-col" style={{ background: 'var(--sp-navy)' }}>
       {/* Logo */}
       <div className="px-4 py-5 border-b" style={{ borderColor: 'oklch(0.18 0.025 228)' }}>
         <Image
