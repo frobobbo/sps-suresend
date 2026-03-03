@@ -177,7 +177,6 @@ export interface ReputationCheck {
     dbl?: { listed: boolean };
     domainExpiry?: { pass: boolean; daysUntilExpiry: number | null; expiresAt: string | null };
     dnssec?: { pass: boolean };
-    ipv6?: { pass: boolean };
     wwwRedirect?: { pass: boolean; exists: boolean };
   };
   checkedAt: string;

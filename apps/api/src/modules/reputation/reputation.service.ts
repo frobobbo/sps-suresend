@@ -21,7 +21,6 @@ const BLOCKED_RESOLVER_CODES = new Set(['127.255.255.254', '127.255.255.255']);
 
 interface DnsClient {
   resolve4(hostname: string): Promise<string[]>;
-  resolve6(hostname: string): Promise<string[]>;
   resolveMx(hostname: string): Promise<{ exchange: string; priority: number }[]>;
   resolveTxt(hostname: string): Promise<string[][]>;
   resolveNs(hostname: string): Promise<string[]>;
@@ -74,7 +73,6 @@ interface CheckDetails {
   dbl?: { listed: boolean };
   domainExpiry?: { pass: boolean; daysUntilExpiry: number | null; expiresAt: string | null };
   dnssec?: { pass: boolean };
-  ipv6?: { pass: boolean };
   wwwRedirect?: { pass: boolean; exists: boolean };
 }
 
@@ -137,7 +135,7 @@ export class ReputationService implements OnModuleInit {
       httpsProps, httpsRedirect,
       blacklists, mtaSts, tlsRpt, bimi,
       caa, nsCount, dbl, ptr,
-      domainExpiry, dnssec, ipv6, wwwRedirect,
+      domainExpiry, dnssec, wwwRedirect,
     ] = await Promise.all([
       this.checkMx(domain),
       this.checkSpf(domain),
@@ -155,7 +153,6 @@ export class ReputationService implements OnModuleInit {
       this.checkPtr(domain),
       this.checkDomainExpiry(domain),
       this.checkDnssec(domain),
-      this.checkIpv6(domain),
       this.checkWwwRedirect(domain),
     ]);
 
@@ -179,7 +176,6 @@ export class ReputationService implements OnModuleInit {
       ptr,
       domainExpiry,
       dnssec,
-      ipv6,
       wwwRedirect,
     };
   }
@@ -558,16 +554,6 @@ export class ReputationService implements OnModuleInit {
     });
   }
 
-  /** IPv6 — checks for AAAA records. */
-  private async checkIpv6(domain: string): Promise<{ pass: boolean }> {
-    try {
-      const addresses = await this.dnsClient.resolve6(domain);
-      return { pass: addresses.length > 0 };
-    } catch {
-      return { pass: false };
-    }
-  }
-
   /**
    * www redirect consistency — checks that http://www.domain redirects to HTTPS.
    * Returns exists:false if the www subdomain doesn't resolve.
@@ -641,7 +627,7 @@ export class ReputationService implements OnModuleInit {
   /**
    * Web reputation score (0–100).
    * Covers: HTTPS, redirect, SSL, security headers (HSTS, CSP, Referrer,
-   *         Permissions), TLS version, NS count, CAA, DNSSEC, IPv6,
+   *         Permissions), TLS version, NS count, CAA, DNSSEC,
    *         www redirect, domain expiry.
    */
   private calcWebScore(details: CheckDetails): number {
@@ -677,7 +663,6 @@ export class ReputationService implements OnModuleInit {
     if (details.nsCount && !details.nsCount.pass) score -= 8;
     if (details.caa && !details.caa.pass) score -= 5;
     if (details.dnssec && !details.dnssec.pass) score -= 8;
-    if (details.ipv6 && !details.ipv6.pass) score -= 2;
 
     if (details.domainExpiry?.daysUntilExpiry !== null && details.domainExpiry?.daysUntilExpiry !== undefined) {
       const days = details.domainExpiry.daysUntilExpiry;

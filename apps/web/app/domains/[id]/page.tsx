@@ -47,7 +47,6 @@ const DOCS: Record<string, string> = {
   ns: 'https://www.cloudflare.com/learning/dns/glossary/dns-nameserver/',
   ptr: 'https://www.cloudflare.com/learning/dns/dns-records/dns-ptr-record/',
   dnssec: 'https://www.cloudflare.com/dns/dnssec/how-dnssec-works/',
-  ipv6: 'https://www.cloudflare.com/learning/network-layer/what-is-ipv6/',
   domainExpiry: 'https://www.icann.org/resources/pages/register-domain-name-2017-06-20-en',
   rbl: 'https://www.spamhaus.org/zen/',
   dbl: 'https://www.spamhaus.org/dbl/',
@@ -156,10 +155,6 @@ const HELP: Record<string, Partial<Record<CheckState | 'blocked', string>>> = {
     pass: 'DNSSEC is enabled. DNS responses for your domain are cryptographically signed, preventing cache poisoning attacks that could redirect visitors or email to malicious servers.',
     fail: 'DNSSEC is not enabled. Attackers could poison DNS caches and redirect traffic intended for your domain without detection.',
   },
-  ipv6: {
-    pass: 'IPv6 (AAAA) records are configured. Your domain is reachable from IPv6-only networks and clients.',
-    fail: 'No IPv6 (AAAA) records found. Your domain is not reachable from IPv6-only networks, which can affect deliverability with some providers.',
-  },
   domainExpiry: {
     pass: 'Domain registration is active with plenty of time remaining before renewal is needed.',
     warn: 'Domain registration expires within 90 days. Renewal should be arranged soon — an expired domain would take all email, web, and other services offline immediately.',
@@ -176,7 +171,7 @@ const HELP: Record<string, Partial<Record<CheckState | 'blocked', string>>> = {
   },
 };
 
-const FIXABLE = new Set(['spf', 'dmarc', 'mtaSts', 'tlsRpt', 'caa']);
+const FIXABLE = new Set(['spf', 'dmarc', 'mtaSts', 'tlsRpt', 'caa', 'dnssec']);
 
 function statusFor(score: number): 'clean' | 'warning' | 'critical' {
   return score >= 80 ? 'clean' : score >= 50 ? 'warning' : 'critical';
@@ -535,7 +530,7 @@ export default function DomainDetailPage() {
       {!domain.cloudflareConnected && canManage && d && (
         (!d.spf.pass || !d.dmarc.pass ||
           (d.mtaSts && !d.mtaSts.pass) || (d.tlsRpt && !d.tlsRpt.pass) ||
-          (d.caa && !d.caa.pass)) && (
+          (d.caa && !d.caa.pass) || (d.dnssec && !d.dnssec.pass)) && (
           <Alert className="border-sky-200 bg-sky-50 text-sky-800">
             <AlertDescription className="flex items-center gap-2">
               <Wrench size={14} className="shrink-0" />
@@ -719,17 +714,14 @@ export default function DomainDetailPage() {
               )}
               {d.dnssec && (
                 <Check state={d.dnssec.pass ? 'pass' : 'fail'}
-                  label="DNSSEC" href={DOCS.dnssec} checkKey="dnssec" />
-              )}
-              {d.ipv6 && (
-                <Check state={d.ipv6.pass ? 'pass' : 'fail'}
-                  label="IPv6 (AAAA Records)" href={DOCS.ipv6} checkKey="ipv6" />
+                  label="DNSSEC" href={DOCS.dnssec}
+                  fixKey="dnssec" onFix={onFix} fixing={fixing === 'dnssec'} />
               )}
               {d.domainExpiry && (
                 <Check state={domainExpiryState(d.domainExpiry)} label={domainExpiryLabel(d.domainExpiry)}
                   href={DOCS.domainExpiry} checkKey="domainExpiry" />
               )}
-              {!d.nsCount && !d.caa && !d.dnssec && !d.ipv6 && !d.domainExpiry && (
+              {!d.nsCount && !d.caa && !d.dnssec && !d.domainExpiry && (
                 <span className="text-xs text-slate-400 italic">Not checked</span>
               )}
             </Section>

@@ -167,6 +167,11 @@ export class CloudflareService {
         };
       }
 
+      case 'dnssec': {
+        await this.cfFetch(token, `/zones/${zoneId}/dnssec`, 'PATCH', { status: 'active' });
+        return { record: 'status=active', action: `DNSSEC enabled for zone ${domain}` };
+      }
+
       default:
         throw new BadRequestException(
           `"${check}" cannot be auto-fixed via Cloudflare DNS`,
