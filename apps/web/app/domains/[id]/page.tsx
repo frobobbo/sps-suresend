@@ -26,20 +26,29 @@ import {
 const DOCS: Record<string, string> = {
   mx: 'https://www.cloudflare.com/learning/dns/dns-records/dns-mx-record/',
   spf: 'https://www.cloudflare.com/learning/email-security/dmarc-dkim-spf/',
+  spfLookups: 'https://www.rfc-editor.org/rfc/rfc7208#section-4.6.4',
   dmarc: 'https://dmarc.org/overview/',
   dkim: 'https://www.cloudflare.com/learning/dns/dns-records/dns-dkim-record/',
   https: 'https://web.dev/articles/why-https-matters',
   httpsRedirect: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Redirections',
+  wwwRedirect: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Redirections',
   ssl: 'https://www.ssl.com/article/what-is-an-ssl-tls-certificate/',
+  tlsVersion: 'https://www.ssl.com/article/tls-1-3/',
   hsts: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security',
   xContentType: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options',
   xFrame: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options',
+  csp: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP',
+  referrerPolicy: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Referrer-Policy',
+  permissionsPolicy: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Permissions-Policy',
   mtaSts: 'https://datatracker.ietf.org/doc/html/rfc8461',
   tlsRpt: 'https://datatracker.ietf.org/doc/html/rfc8460',
   bimi: 'https://bimigroup.org/',
   caa: 'https://www.cloudflare.com/learning/ssl/what-is-a-caa-record/',
   ns: 'https://www.cloudflare.com/learning/dns/glossary/dns-nameserver/',
   ptr: 'https://www.cloudflare.com/learning/dns/dns-records/dns-ptr-record/',
+  dnssec: 'https://www.cloudflare.com/dns/dnssec/how-dnssec-works/',
+  ipv6: 'https://www.cloudflare.com/learning/network-layer/what-is-ipv6/',
+  domainExpiry: 'https://www.icann.org/resources/pages/register-domain-name-2017-06-20-en',
   rbl: 'https://www.spamhaus.org/zen/',
   dbl: 'https://www.spamhaus.org/dbl/',
 };
@@ -113,6 +122,48 @@ const HELP: Record<string, Partial<Record<CheckState | 'blocked', string>>> = {
   ptr: {
     pass: 'Reverse DNS (PTR) is configured. The MX server IP resolves to a hostname, which many mail servers require before accepting email.',
     fail: 'No PTR record found for the MX server IP. Some mail servers reject email from IPs without reverse DNS configured.',
+  },
+  spfLookups: {
+    pass: 'SPF lookup count is within the RFC limit of 10. All senders can resolve your SPF record correctly.',
+    warn: 'SPF is approaching the 10-lookup limit (8–10 mechanisms). Adding more includes could push it over and cause SPF to fail for all senders.',
+    fail: 'SPF has more than 10 DNS lookups. This causes a permerror and SPF hard-fails for every sender — effectively breaking email authentication.',
+  },
+  dmarcPct: {
+    warn: 'DMARC pct= is less than 100. Only that percentage of messages are subject to the DMARC policy — the rest are treated as if no policy existed. Set pct=100 for full enforcement.',
+  },
+  csp: {
+    pass: 'Content Security Policy is set. Browsers are told which sources are allowed to load scripts, styles, and other resources, blocking most XSS attacks.',
+    fail: 'No Content-Security-Policy header found. Injected scripts can run freely, making your site vulnerable to cross-site scripting (XSS) attacks.',
+  },
+  referrerPolicy: {
+    pass: 'Referrer-Policy header is set. Your site controls what URL information browsers share when users navigate away.',
+    fail: 'Referrer-Policy header is missing. Browsers may send the full page URL as a Referer header to third-party sites, leaking navigation paths and potential query parameters.',
+  },
+  permissionsPolicy: {
+    pass: 'Permissions-Policy header is set. Browser APIs (camera, microphone, geolocation, etc.) are explicitly restricted for this site.',
+    fail: 'Permissions-Policy header is missing. There are no declared restrictions on which browser APIs embedded content or third-party scripts can access.',
+  },
+  tlsVersion: {
+    pass: 'TLS 1.3 is negotiated — the most secure and efficient version available.',
+    warn: 'TLS 1.2 is negotiated. This is still secure, but upgrading server configuration to prefer TLS 1.3 improves performance and forward secrecy.',
+    fail: 'TLS 1.1 or older is being negotiated. These versions are deprecated (RFC 8996) and no longer considered secure. Update your server to require TLS 1.2 or higher.',
+  },
+  wwwRedirect: {
+    pass: 'http://www.yourdomain correctly redirects to HTTPS. Visitors using the www prefix get a secure connection.',
+    fail: 'http://www.yourdomain does not redirect to HTTPS. Visitors using the www prefix may get an insecure or broken connection.',
+  },
+  dnssec: {
+    pass: 'DNSSEC is enabled. DNS responses for your domain are cryptographically signed, preventing cache poisoning attacks that could redirect visitors or email to malicious servers.',
+    fail: 'DNSSEC is not enabled. Attackers could poison DNS caches and redirect traffic intended for your domain without detection.',
+  },
+  ipv6: {
+    pass: 'IPv6 (AAAA) records are configured. Your domain is reachable from IPv6-only networks and clients.',
+    fail: 'No IPv6 (AAAA) records found. Your domain is not reachable from IPv6-only networks, which can affect deliverability with some providers.',
+  },
+  domainExpiry: {
+    pass: 'Domain registration is active with plenty of time remaining before renewal is needed.',
+    warn: 'Domain registration expires within 90 days. Renewal should be arranged soon — an expired domain would take all email, web, and other services offline immediately.',
+    fail: 'Domain registration expires very soon (within 30 days) or has already expired. This is a critical risk — renew immediately.',
   },
   rbl: {
     pass: 'Not listed on this IP blacklist.',
@@ -279,13 +330,43 @@ function dmarcLabel(dmarc: ReputationCheck['details']['dmarc']): string {
   if (!dmarc.pass) return 'DMARC Record';
   const parts: string[] = [];
   if (dmarc.policy) parts.push(`p=${dmarc.policy}`);
+  if (dmarc.pct !== undefined && dmarc.pct < 100) parts.push(`pct=${dmarc.pct}%`);
   if (dmarc.hasRua === false) parts.push('no rua');
   return `DMARC${parts.length ? ` — ${parts.join(', ')}` : ''}`;
 }
 function dmarcState(dmarc: ReputationCheck['details']['dmarc']): CheckState {
   if (!dmarc.pass) return 'fail';
-  if (dmarc.policy === 'none' || dmarc.policy === 'quarantine' || dmarc.hasRua === false) return 'warn';
+  if (dmarc.policy === 'none' || dmarc.policy === 'quarantine' || dmarc.hasRua === false ||
+      (dmarc.pct !== undefined && dmarc.pct < 100)) return 'warn';
   return 'pass';
+}
+function spfLookupsState(spf: ReputationCheck['details']['spf']): CheckState {
+  const n = spf.lookups ?? 0;
+  if (n > 10) return 'fail';
+  if (n >= 8) return 'warn';
+  return 'pass';
+}
+function spfLookupsLabel(spf: ReputationCheck['details']['spf']): string {
+  return `SPF Lookup Count (${spf.lookups ?? 0} / 10)`;
+}
+function tlsVersionState(tv: NonNullable<ReputationCheck['details']['tlsVersion']>): CheckState {
+  if (!tv.pass) return 'fail';
+  if (tv.protocol === 'TLSv1.2') return 'warn';
+  return 'pass';
+}
+function tlsVersionLabel(tv: NonNullable<ReputationCheck['details']['tlsVersion']>): string {
+  return `TLS Version${tv.protocol ? ` (${tv.protocol})` : ''}`;
+}
+function domainExpiryState(de: NonNullable<ReputationCheck['details']['domainExpiry']>): CheckState {
+  if (de.daysUntilExpiry === null) return 'pass';
+  if (de.daysUntilExpiry <= 30) return 'fail';
+  if (de.daysUntilExpiry <= 90) return 'warn';
+  return 'pass';
+}
+function domainExpiryLabel(de: NonNullable<ReputationCheck['details']['domainExpiry']>): string {
+  if (de.daysUntilExpiry === null) return 'Domain Registration';
+  if (de.daysUntilExpiry <= 0) return 'Domain Registration (EXPIRED)';
+  return `Domain Registration (${de.daysUntilExpiry}d remaining)`;
 }
 function sslLabel(ssl: NonNullable<ReputationCheck['details']['ssl']>): string {
   if (!ssl.pass) return 'SSL Certificate (expired or invalid)';
@@ -518,6 +599,10 @@ export default function DomainDetailPage() {
               <Check state={d.dkim.pass ? 'pass' : 'fail'}
                 label={`DKIM${d.dkim.selector ? ` (${d.dkim.selector})` : ''}`}
                 href={DOCS.dkim} checkKey="dkim" />
+              {d.spf.lookups !== undefined && (
+                <Check state={spfLookupsState(d.spf)} label={spfLookupsLabel(d.spf)}
+                  href={DOCS.spfLookups} checkKey="spfLookups" />
+              )}
             </Section>
 
             <Section title="Transport Security">
@@ -604,7 +689,21 @@ export default function DomainDetailPage() {
                   label="X-Content-Type-Options" href={DOCS.xContentType} checkKey="xContentType" />
                 <Check state={d.securityHeaders.xFrameOptions ? 'pass' : 'fail'}
                   label="X-Frame-Options" href={DOCS.xFrame} checkKey="xFrame" />
+                <Check state={d.securityHeaders.csp ? 'pass' : 'fail'}
+                  label="Content Security Policy (CSP)" href={DOCS.csp} checkKey="csp" />
+                <Check state={d.securityHeaders.referrerPolicy ? 'pass' : 'fail'}
+                  label="Referrer-Policy" href={DOCS.referrerPolicy} checkKey="referrerPolicy" />
+                <Check state={d.securityHeaders.permissionsPolicy ? 'pass' : 'fail'}
+                  label="Permissions-Policy" href={DOCS.permissionsPolicy} checkKey="permissionsPolicy" />
               </>)}
+              {d.tlsVersion && (
+                <Check state={tlsVersionState(d.tlsVersion)} label={tlsVersionLabel(d.tlsVersion)}
+                  href={DOCS.tlsVersion} checkKey="tlsVersion" />
+              )}
+              {d.wwwRedirect?.exists && (
+                <Check state={d.wwwRedirect.pass ? 'pass' : 'fail'}
+                  label="www → HTTPS Redirect" href={DOCS.wwwRedirect} checkKey="wwwRedirect" />
+              )}
             </Section>
 
             <Section title="DNS Health">
@@ -618,7 +717,19 @@ export default function DomainDetailPage() {
                   label={`CAA Records${d.caa.records[0] ? ` (${d.caa.records[0]})` : ''}`}
                   href={DOCS.caa} fixKey="caa" onFix={onFix} fixing={fixing === 'caa'} />
               )}
-              {!d.nsCount && !d.caa && (
+              {d.dnssec && (
+                <Check state={d.dnssec.pass ? 'pass' : 'fail'}
+                  label="DNSSEC" href={DOCS.dnssec} checkKey="dnssec" />
+              )}
+              {d.ipv6 && (
+                <Check state={d.ipv6.pass ? 'pass' : 'fail'}
+                  label="IPv6 (AAAA Records)" href={DOCS.ipv6} checkKey="ipv6" />
+              )}
+              {d.domainExpiry && (
+                <Check state={domainExpiryState(d.domainExpiry)} label={domainExpiryLabel(d.domainExpiry)}
+                  href={DOCS.domainExpiry} checkKey="domainExpiry" />
+              )}
+              {!d.nsCount && !d.caa && !d.dnssec && !d.ipv6 && !d.domainExpiry && (
                 <span className="text-xs text-slate-400 italic">Not checked</span>
               )}
             </Section>

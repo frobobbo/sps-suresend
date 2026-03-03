@@ -50,7 +50,8 @@
       "Bash(git -C /home/brett/Documents/projects/sps-suresend show gh-pages:index.yaml)",
       "Bash(curl -s \"https://registry.hub.docker.com/v2/repositories/mvance/unbound/tags?page_size=10\")",
       "Bash(python3 -c \"import json,sys; [print\\(t[''name'']\\) for t in json.load\\(sys.stdin\\).get\\(''results'',[]\\)]\")",
-      "Bash(git add apps/api/src/modules/domains/ apps/web/lib/api.ts \"apps/web/app/domains/[id]/page.tsx\")"
+      "Bash(git add apps/api/src/modules/domains/ apps/web/lib/api.ts \"apps/web/app/domains/[id]/page.tsx\")",
+      "Bash(git add -A)"
     ],
     "additionalDirectories": [
       "/home/brett/Documents/projects/sps-suresend/apps/api/src",

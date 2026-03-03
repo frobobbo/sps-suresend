@@ -2,8 +2,8 @@ apiVersion: v2
 name: suresend
 description: StrategyPlus SureSend — email reputation monitoring platform
 type: application
-version: 0.9.0
-appVersion: "0.9.0"
+version: 1.0.0
+appVersion: "1.0.0"
 keywords:
   - email
   - reputation

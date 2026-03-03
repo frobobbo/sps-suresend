@@ -12,18 +12,16 @@ const RBLS = [
   'zen.spamhaus.org',
   'bl.spamcop.net',
   'dnsbl.sorbs.net',
-  'cbl.abuseat.org',  // Composite Blocking List (replaced defunct b.barracuda.com)
+  'cbl.abuseat.org',
 ];
 
 // Return codes that indicate the querying resolver is blocked by the RBL,
-// not that the IP is actually listed. Spamhaus (and others) return these
-// when queries arrive through public resolvers like 8.8.8.8 or 1.1.1.1.
+// not that the IP is actually listed.
 const BLOCKED_RESOLVER_CODES = new Set(['127.255.255.254', '127.255.255.255']);
 
-// Minimal interface satisfied by both the global dns.promises module and a
-// per-instance dns.promises.Resolver (which supports custom nameserver config).
 interface DnsClient {
   resolve4(hostname: string): Promise<string[]>;
+  resolve6(hostname: string): Promise<string[]>;
   resolveMx(hostname: string): Promise<{ exchange: string; priority: number }[]>;
   resolveTxt(hostname: string): Promise<string[][]>;
   resolveNs(hostname: string): Promise<string[]>;
@@ -34,7 +32,6 @@ interface DnsClient {
 interface BlacklistResult {
   list: string;
   listed: boolean;
-  /** true when the RBL refused the query (public resolver blocked) — not a real listing */
   blocked?: boolean;
 }
 
@@ -44,19 +41,30 @@ interface CheckDetails {
     pass: boolean;
     record: string | null;
     policy?: 'hard_fail' | 'soft_fail' | 'permissive' | 'pass_all';
+    lookups?: number;
   };
   dmarc: {
     pass: boolean;
     record: string | null;
     policy?: 'reject' | 'quarantine' | 'none';
     hasRua?: boolean;
+    hasRuf?: boolean;
+    pct?: number;
   };
   dkim: { pass: boolean; selector: string | null };
   https: { pass: boolean; statusCode: number | null };
   blacklists: BlacklistResult[];
   httpsRedirect?: { pass: boolean };
   ssl?: { pass: boolean; daysUntilExpiry: number | null; expiresAt: string | null };
-  securityHeaders?: { hsts: boolean; xContentTypeOptions: boolean; xFrameOptions: boolean };
+  securityHeaders?: {
+    hsts: boolean;
+    xContentTypeOptions: boolean;
+    xFrameOptions: boolean;
+    csp: boolean;
+    referrerPolicy: boolean;
+    permissionsPolicy: boolean;
+  };
+  tlsVersion?: { protocol: string | null; pass: boolean };
   mtaSts?: { pass: boolean; policy?: string };
   tlsRpt?: { pass: boolean; record: string | null };
   bimi?: { pass: boolean; record: string | null };
@@ -64,14 +72,16 @@ interface CheckDetails {
   nsCount?: { pass: boolean; count: number };
   ptr?: { pass: boolean; hostname: string | null };
   dbl?: { listed: boolean };
+  domainExpiry?: { pass: boolean; daysUntilExpiry: number | null; expiresAt: string | null };
+  dnssec?: { pass: boolean };
+  ipv6?: { pass: boolean };
+  wwwRedirect?: { pass: boolean; exists: boolean };
 }
 
 @Injectable()
 export class ReputationService implements OnModuleInit {
   private readonly logger = new Logger(ReputationService.name);
 
-  // Default: global dns.promises (system resolver).
-  // Replaced in onModuleInit when DNS_RESOLVER_IP or DNS_RESOLVER_HOST is set.
   private dnsClient: DnsClient = dnsPromises as unknown as DnsClient;
 
   constructor(
@@ -80,8 +90,6 @@ export class ReputationService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    // DNS_RESOLVER_IP  — direct IP (Docker Compose: fixed IP of unbound container)
-    // DNS_RESOLVER_HOST — hostname resolved via system DNS (Kubernetes: K8s service name)
     let resolverIp = process.env.DNS_RESOLVER_IP ?? null;
 
     if (!resolverIp && process.env.DNS_RESOLVER_HOST) {
@@ -124,23 +132,33 @@ export class ReputationService implements OnModuleInit {
   }
 
   private async gatherDetails(domain: string): Promise<CheckDetails> {
-    const [mx, spf, dmarc, dkim, httpsProps, httpsRedirect, blacklists, mtaSts, tlsRpt, bimi, caa, nsCount, dbl, ptr] =
-      await Promise.all([
-        this.checkMx(domain),
-        this.checkSpf(domain),
-        this.checkDmarc(domain),
-        this.checkDkim(domain),
-        this.checkHttpsProperties(domain),
-        this.checkHttpRedirect(domain),
-        this.checkBlacklists(domain),
-        this.checkMtaSts(domain),
-        this.checkTlsRpt(domain),
-        this.checkBimi(domain),
-        this.checkCaa(domain),
-        this.checkNsCount(domain),
-        this.checkDbl(domain),
-        this.checkPtr(domain),
-      ]);
+    const [
+      mx, spf, dmarc, dkim,
+      httpsProps, httpsRedirect,
+      blacklists, mtaSts, tlsRpt, bimi,
+      caa, nsCount, dbl, ptr,
+      domainExpiry, dnssec, ipv6, wwwRedirect,
+    ] = await Promise.all([
+      this.checkMx(domain),
+      this.checkSpf(domain),
+      this.checkDmarc(domain),
+      this.checkDkim(domain),
+      this.checkHttpsProperties(domain),
+      this.checkHttpRedirect(domain),
+      this.checkBlacklists(domain),
+      this.checkMtaSts(domain),
+      this.checkTlsRpt(domain),
+      this.checkBimi(domain),
+      this.checkCaa(domain),
+      this.checkNsCount(domain),
+      this.checkDbl(domain),
+      this.checkPtr(domain),
+      this.checkDomainExpiry(domain),
+      this.checkDnssec(domain),
+      this.checkIpv6(domain),
+      this.checkWwwRedirect(domain),
+    ]);
+
     return {
       mx,
       spf,
@@ -149,6 +167,7 @@ export class ReputationService implements OnModuleInit {
       https: httpsProps.https,
       ssl: httpsProps.ssl,
       securityHeaders: httpsProps.securityHeaders,
+      tlsVersion: httpsProps.tlsVersion,
       httpsRedirect,
       blacklists,
       mtaSts,
@@ -158,8 +177,14 @@ export class ReputationService implements OnModuleInit {
       nsCount,
       dbl,
       ptr,
+      domainExpiry,
+      dnssec,
+      ipv6,
+      wwwRedirect,
     };
   }
+
+  // ── Individual checks ────────────────────────────────────────────────────────
 
   private async checkMx(domain: string) {
     try {
@@ -182,10 +207,50 @@ export class ReputationService implements OnModuleInit {
       else if (record.includes('~all')) policy = 'soft_fail';
       else if (record.includes('+all')) policy = 'pass_all';
       else policy = 'permissive';
-      return { pass: true, record, policy };
+      const lookups = await this.countSpfLookups(record, 0);
+      return { pass: true, record, policy, lookups };
     } catch {
       return { pass: false, record: null };
     }
+  }
+
+  /**
+   * Recursively count the number of DNS lookups caused by an SPF record.
+   * RFC 7208 §4.6.4 allows a maximum of 10.
+   */
+  private async countSpfLookups(record: string, depth: number): Promise<number> {
+    if (depth > 3) return 0;
+    const tokens = record.split(/\s+/);
+    let count = 0;
+    const subPromises: Promise<number>[] = [];
+
+    for (const token of tokens) {
+      // Mechanisms that cost exactly 1 lookup: a, mx, ptr, exists
+      if (/^[+-~?]?(a|mx|ptr|exists)(:|$)/i.test(token)) {
+        count++;
+      }
+      // include: costs 1 + the lookups inside the included record
+      if (/^[+-~?]?include:/i.test(token)) {
+        count++;
+        const target = token.replace(/^[+-~?]?include:/i, '');
+        subPromises.push(
+          this.dnsClient.resolveTxt(target)
+            .then((txt) => {
+              const flat = txt.map((r) => r.join(''));
+              const spf = flat.find((r) => r.startsWith('v=spf1'));
+              return spf ? this.countSpfLookups(spf, depth + 1) : 0;
+            })
+            .catch(() => 0),
+        );
+      }
+      // redirect= costs 1 + replaces the record — count it but don't recurse for simplicity
+      if (/^redirect=/i.test(token)) {
+        count++;
+      }
+    }
+
+    const subCounts = await Promise.all(subPromises);
+    return count + subCounts.reduce((a, b) => a + b, 0);
   }
 
   private async checkDmarc(domain: string) {
@@ -197,7 +262,10 @@ export class ReputationService implements OnModuleInit {
       const policyMatch = /\bp=(\w+)/.exec(record);
       const policy = (policyMatch?.[1] as 'reject' | 'quarantine' | 'none') ?? undefined;
       const hasRua = /\brua=/.test(record);
-      return { pass: true, record, policy, hasRua };
+      const hasRuf = /\bruf=/.test(record);
+      const pctMatch = /\bpct=(\d+)/.exec(record);
+      const pct = pctMatch ? parseInt(pctMatch[1], 10) : 100;
+      return { pass: true, record, policy, hasRua, hasRuf, pct };
     } catch {
       return { pass: false, record: null };
     }
@@ -218,12 +286,24 @@ export class ReputationService implements OnModuleInit {
   private checkHttpsProperties(domain: string): Promise<{
     https: { pass: boolean; statusCode: number | null };
     ssl: { pass: boolean; daysUntilExpiry: number | null; expiresAt: string | null };
-    securityHeaders: { hsts: boolean; xContentTypeOptions: boolean; xFrameOptions: boolean };
+    securityHeaders: {
+      hsts: boolean;
+      xContentTypeOptions: boolean;
+      xFrameOptions: boolean;
+      csp: boolean;
+      referrerPolicy: boolean;
+      permissionsPolicy: boolean;
+    };
+    tlsVersion: { protocol: string | null; pass: boolean };
   }> {
     const fail = {
       https: { pass: false, statusCode: null },
       ssl: { pass: false, daysUntilExpiry: null, expiresAt: null },
-      securityHeaders: { hsts: false, xContentTypeOptions: false, xFrameOptions: false },
+      securityHeaders: {
+        hsts: false, xContentTypeOptions: false, xFrameOptions: false,
+        csp: false, referrerPolicy: false, permissionsPolicy: false,
+      },
+      tlsVersion: { protocol: null, pass: false },
     };
     return new Promise((resolve) => {
       const req = https.get(
@@ -232,12 +312,14 @@ export class ReputationService implements OnModuleInit {
           let daysUntilExpiry: number | null = null;
           let expiresAt: string | null = null;
           let sslPass = false;
+          let protocol: string | null = null;
           try {
-            const cert = (res.socket as tls.TLSSocket).getPeerCertificate();
+            const sock = res.socket as tls.TLSSocket;
+            protocol = sock.getProtocol?.() ?? null;
+            const cert = sock.getPeerCertificate();
             if (cert?.valid_to) {
               const expiry = new Date(cert.valid_to);
-              const now = new Date();
-              daysUntilExpiry = Math.floor((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+              daysUntilExpiry = Math.floor((expiry.getTime() - Date.now()) / 86_400_000);
               expiresAt = expiry.toISOString();
               sslPass = daysUntilExpiry > 0;
             }
@@ -249,6 +331,13 @@ export class ReputationService implements OnModuleInit {
               hsts: !!res.headers['strict-transport-security'],
               xContentTypeOptions: String(res.headers['x-content-type-options'] ?? '').toLowerCase().includes('nosniff'),
               xFrameOptions: !!res.headers['x-frame-options'],
+              csp: !!res.headers['content-security-policy'],
+              referrerPolicy: !!res.headers['referrer-policy'],
+              permissionsPolicy: !!res.headers['permissions-policy'],
+            },
+            tlsVersion: {
+              protocol,
+              pass: protocol === 'TLSv1.2' || protocol === 'TLSv1.3',
             },
           });
         },
@@ -358,8 +447,7 @@ export class ReputationService implements OnModuleInit {
       const mxHost = mxRecords.sort((a, b) => a.priority - b.priority)[0].exchange;
       const addresses = await this.dnsClient.resolve4(mxHost);
       if (!addresses.length) return { pass: false, hostname: null };
-      const ip = addresses[0];
-      const ptrs = await this.dnsClient.reverse(ip);
+      const ptrs = await this.dnsClient.reverse(addresses[0]);
       return { pass: ptrs.length > 0, hostname: ptrs[0] ?? null };
     } catch {
       return { pass: false, hostname: null };
@@ -375,19 +463,13 @@ export class ReputationService implements OnModuleInit {
     } catch {
       return RBLS.map((list) => ({ list, listed: false }));
     }
-
     const reversed = ip.split('.').reverse().join('.');
     return Promise.all(
       RBLS.map(async (list) => {
         try {
           const results = await this.dnsClient.resolve4(`${reversed}.${list}`);
           const returnCode = results[0];
-          // Spamhaus and some other RBLs return 127.255.255.254 / 127.255.255.255
-          // when the query comes from a public resolver (e.g. 8.8.8.8, 1.1.1.1).
-          // This is not a real listing — treat it as indeterminate and don't penalise.
-          if (BLOCKED_RESOLVER_CODES.has(returnCode)) {
-            return { list, listed: false, blocked: true };
-          }
+          if (BLOCKED_RESOLVER_CODES.has(returnCode)) return { list, listed: false, blocked: true };
           return { list, listed: true };
         } catch {
           return { list, listed: false };
@@ -396,34 +478,155 @@ export class ReputationService implements OnModuleInit {
     );
   }
 
+  // ── New checks ───────────────────────────────────────────────────────────────
+
+  /**
+   * Domain registration expiry via RDAP (no API key needed).
+   * Warns at 90 days, fails at 30 days.
+   */
+  private checkDomainExpiry(domain: string): Promise<{
+    pass: boolean;
+    daysUntilExpiry: number | null;
+    expiresAt: string | null;
+  }> {
+    const unknown = { pass: true, daysUntilExpiry: null, expiresAt: null };
+    return new Promise((resolve) => {
+      const req = https.get(
+        {
+          hostname: 'rdap.org',
+          path: `/domain/${encodeURIComponent(domain)}`,
+          timeout: 8000,
+          headers: { Accept: 'application/json', 'User-Agent': 'SureSend-Monitor/1.0' },
+        },
+        (res) => {
+          let body = '';
+          res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+          res.on('end', () => {
+            try {
+              const data = JSON.parse(body);
+              const expiryEvent = (data.events as { eventAction: string; eventDate: string }[])
+                ?.find((e) => e.eventAction === 'expiration');
+              if (!expiryEvent?.eventDate) { resolve(unknown); return; }
+              const expiry = new Date(expiryEvent.eventDate);
+              const daysUntilExpiry = Math.floor((expiry.getTime() - Date.now()) / 86_400_000);
+              resolve({
+                pass: daysUntilExpiry > 30,
+                daysUntilExpiry,
+                expiresAt: expiry.toISOString(),
+              });
+            } catch {
+              resolve(unknown);
+            }
+          });
+        },
+      );
+      req.on('error', () => resolve(unknown));
+      req.on('timeout', () => { req.destroy(); resolve(unknown); });
+    });
+  }
+
+  /**
+   * DNSSEC — checks for DNSKEY records via Google DNS-over-HTTPS.
+   * Returns pass if DNSKEY records are found for the domain.
+   */
+  private checkDnssec(domain: string): Promise<{ pass: boolean }> {
+    return new Promise((resolve) => {
+      const req = https.get(
+        {
+          hostname: 'dns.google',
+          path: `/resolve?name=${encodeURIComponent(domain)}&type=DNSKEY`,
+          timeout: 5000,
+          headers: { Accept: 'application/dns-json' },
+        },
+        (res) => {
+          let body = '';
+          res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+          res.on('end', () => {
+            try {
+              const data = JSON.parse(body);
+              const hasDnskey =
+                data.Status === 0 && Array.isArray(data.Answer) && data.Answer.length > 0;
+              resolve({ pass: hasDnskey });
+            } catch {
+              resolve({ pass: false });
+            }
+          });
+        },
+      );
+      req.on('error', () => resolve({ pass: false }));
+      req.on('timeout', () => { req.destroy(); resolve({ pass: false }); });
+    });
+  }
+
+  /** IPv6 — checks for AAAA records. */
+  private async checkIpv6(domain: string): Promise<{ pass: boolean }> {
+    try {
+      const addresses = await this.dnsClient.resolve6(domain);
+      return { pass: addresses.length > 0 };
+    } catch {
+      return { pass: false };
+    }
+  }
+
+  /**
+   * www redirect consistency — checks that http://www.domain redirects to HTTPS.
+   * Returns exists:false if the www subdomain doesn't resolve.
+   */
+  private checkWwwRedirect(domain: string): Promise<{ pass: boolean; exists: boolean }> {
+    return new Promise((resolve) => {
+      const req = http.get(
+        { hostname: `www.${domain}`, path: '/', port: 80, timeout: 5000 },
+        (res) => {
+          const sc = res.statusCode ?? 0;
+          const loc = res.headers.location ?? '';
+          resolve({ pass: sc >= 300 && sc < 400 && loc.startsWith('https://'), exists: true });
+        },
+      );
+      req.on('error', (err: NodeJS.ErrnoException) => {
+        const notFound = err.code === 'ENOTFOUND' || err.code === 'EAI_NONAME';
+        resolve({ pass: false, exists: !notFound });
+      });
+      req.on('timeout', () => { req.destroy(); resolve({ pass: false, exists: true }); });
+    });
+  }
+
+  // ── Scoring ──────────────────────────────────────────────────────────────────
+
   /**
    * Email reputation score (0–100).
-   * Covers: MX, SPF, DMARC, DKIM, MTA-STS, TLS-RPT, PTR, IP blacklists, DBL.
+   * Covers: MX, SPF (+ lookup count), DMARC (+ pct), DKIM, MTA-STS,
+   *         TLS-RPT, PTR, IP blacklists, DBL.
    */
   private calcEmailScore(details: CheckDetails): number {
     let score = 100;
 
     if (!details.mx.pass) score -= 30;
 
-    if (!details.spf.pass) score -= 15;
-    else {
+    if (!details.spf.pass) {
+      score -= 15;
+    } else {
       if (details.spf.policy === 'pass_all') score -= 5;
       else if (details.spf.policy === 'permissive') score -= 5;
       else if (details.spf.policy === 'soft_fail') score -= 3;
+      // SPF lookup count (RFC limit = 10)
+      const lookups = details.spf.lookups ?? 0;
+      if (lookups > 10) score -= 8;       // permerror — SPF fails for all senders
+      else if (lookups >= 8) score -= 3;  // approaching limit
     }
 
-    if (!details.dmarc.pass) score -= 15;
-    else {
+    if (!details.dmarc.pass) {
+      score -= 15;
+    } else {
       if (details.dmarc.policy === 'none') score -= 5;
       else if (details.dmarc.policy === 'quarantine') score -= 2;
       if (details.dmarc.hasRua === false) score -= 2;
+      if (details.dmarc.pct !== undefined && details.dmarc.pct < 100) score -= 3;
     }
 
     if (!details.dkim.pass) score -= 10;
 
     if (details.mtaSts && !details.mtaSts.pass) score -= 5;
     if (details.tlsRpt && !details.tlsRpt.pass) score -= 3;
-    // BIMI: brand enhancement only, no score impact
 
     if (details.ptr && !details.ptr.pass) score -= 5;
 
@@ -437,7 +640,9 @@ export class ReputationService implements OnModuleInit {
 
   /**
    * Web reputation score (0–100).
-   * Covers: HTTPS, redirect, SSL, security headers, NS count, CAA.
+   * Covers: HTTPS, redirect, SSL, security headers (HSTS, CSP, Referrer,
+   *         Permissions), TLS version, NS count, CAA, DNSSEC, IPv6,
+   *         www redirect, domain expiry.
    */
   private calcWebScore(details: CheckDetails): number {
     let score = 100;
@@ -455,15 +660,32 @@ export class ReputationService implements OnModuleInit {
         }
       }
 
+      if (details.tlsVersion && !details.tlsVersion.pass) score -= 8;
+
       if (details.securityHeaders) {
         if (!details.securityHeaders.hsts) score -= 5;
+        if (!details.securityHeaders.csp) score -= 5;
         if (!details.securityHeaders.xContentTypeOptions) score -= 3;
         if (!details.securityHeaders.xFrameOptions) score -= 3;
+        if (!details.securityHeaders.referrerPolicy) score -= 2;
+        if (!details.securityHeaders.permissionsPolicy) score -= 2;
       }
+
+      if (details.wwwRedirect?.exists && !details.wwwRedirect.pass) score -= 3;
     }
 
     if (details.nsCount && !details.nsCount.pass) score -= 8;
     if (details.caa && !details.caa.pass) score -= 5;
+    if (details.dnssec && !details.dnssec.pass) score -= 8;
+    if (details.ipv6 && !details.ipv6.pass) score -= 2;
+
+    if (details.domainExpiry?.daysUntilExpiry !== null && details.domainExpiry?.daysUntilExpiry !== undefined) {
+      const days = details.domainExpiry.daysUntilExpiry;
+      if (days <= 0) score -= 25;
+      else if (days <= 7) score -= 20;
+      else if (days <= 30) score -= 12;
+      else if (days <= 90) score -= 5;
+    }
 
     return Math.max(0, score);
   }
@@ -476,7 +698,6 @@ export class ReputationService implements OnModuleInit {
   } {
     const emailScore = this.calcEmailScore(details);
     const webScore = this.calcWebScore(details);
-    // Overall: email weighted 60%, web 40% (email deliverability is the product's core focus)
     const score = Math.max(0, Math.round(emailScore * 0.6 + webScore * 0.4));
     const status = score >= 80 ? 'clean' : score >= 50 ? 'warning' : 'critical';
     return { score, emailScore, webScore, status };

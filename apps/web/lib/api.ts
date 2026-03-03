@@ -159,14 +159,15 @@ export interface ReputationCheck {
   status: 'clean' | 'warning' | 'critical';
   details: {
     mx: { pass: boolean; records: string[] };
-    spf: { pass: boolean; record: string | null; policy?: 'hard_fail' | 'soft_fail' | 'permissive' | 'pass_all' };
-    dmarc: { pass: boolean; record: string | null; policy?: 'reject' | 'quarantine' | 'none'; hasRua?: boolean };
+    spf: { pass: boolean; record: string | null; policy?: 'hard_fail' | 'soft_fail' | 'permissive' | 'pass_all'; lookups?: number };
+    dmarc: { pass: boolean; record: string | null; policy?: 'reject' | 'quarantine' | 'none'; hasRua?: boolean; hasRuf?: boolean; pct?: number };
     dkim: { pass: boolean; selector: string | null };
     https: { pass: boolean; statusCode: number | null };
     blacklists: { list: string; listed: boolean; blocked?: boolean }[];
     httpsRedirect?: { pass: boolean };
     ssl?: { pass: boolean; daysUntilExpiry: number | null; expiresAt: string | null };
-    securityHeaders?: { hsts: boolean; xContentTypeOptions: boolean; xFrameOptions: boolean };
+    securityHeaders?: { hsts: boolean; xContentTypeOptions: boolean; xFrameOptions: boolean; csp: boolean; referrerPolicy: boolean; permissionsPolicy: boolean };
+    tlsVersion?: { protocol: string | null; pass: boolean };
     mtaSts?: { pass: boolean; policy?: string };
     tlsRpt?: { pass: boolean; record: string | null };
     bimi?: { pass: boolean; record: string | null };
@@ -174,6 +175,10 @@ export interface ReputationCheck {
     nsCount?: { pass: boolean; count: number };
     ptr?: { pass: boolean; hostname: string | null };
     dbl?: { listed: boolean };
+    domainExpiry?: { pass: boolean; daysUntilExpiry: number | null; expiresAt: string | null };
+    dnssec?: { pass: boolean };
+    ipv6?: { pass: boolean };
+    wwwRedirect?: { pass: boolean; exists: boolean };
   };
   checkedAt: string;
 }
