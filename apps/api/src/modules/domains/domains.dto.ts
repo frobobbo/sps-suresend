@@ -1,5 +1,11 @@
 import { IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 
+export class SetCloudflareTokenDto {
+  @IsString()
+  @MinLength(10)
+  token!: string;
+}
+
 export class CreateDomainDto {
   @IsString()
   @MinLength(3)

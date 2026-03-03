@@ -97,6 +97,20 @@ export const domains = {
 
   revokeAccess: (domainId: string, userId: string) =>
     apiFetch<void>(`/domains/${domainId}/access/${userId}`, { method: 'DELETE' }),
+
+  connectCloudflare: (domainId: string, token: string) =>
+    apiFetch<{ cloudflareConnected: boolean }>(`/domains/${domainId}/cloudflare`, {
+      method: 'PUT',
+      body: JSON.stringify({ token }),
+    }),
+
+  disconnectCloudflare: (domainId: string) =>
+    apiFetch<void>(`/domains/${domainId}/cloudflare`, { method: 'DELETE' }),
+
+  fixCheck: (domainId: string, check: string) =>
+    apiFetch<{ record: string; action: string }>(`/domains/${domainId}/fix/${check}`, {
+      method: 'POST',
+    }),
 };
 
 // ─── Reputation ───────────────────────────────────────────────────────────────
@@ -132,6 +146,7 @@ export interface Domain {
   name: string;
   ownerId: string;
   delegatedAccess: DomainAccess[];
+  cloudflareConnected?: boolean;
   createdAt: string;
 }
 

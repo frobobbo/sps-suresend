@@ -31,6 +31,11 @@ export class Domain {
   @OneToMany(() => ReputationCheck, (check) => check.domain, { cascade: true })
   reputationChecks!: ReputationCheck[];
 
+  // Scoped Cloudflare API token for auto-fix. select:false means it is
+  // never included in normal queries — must be explicitly requested.
+  @Column({ nullable: true, type: 'text', select: false })
+  cloudflareToken!: string | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

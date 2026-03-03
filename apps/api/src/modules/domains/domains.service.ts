@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -8,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Domain } from './domain.entity';
 import { DomainAccess } from './domain-access.entity';
+import { CloudflareService } from './cloudflare.service';
 import { CreateDomainDto, DelegateAccessDto } from './domains.dto';
 
 interface RequestUser {
@@ -22,6 +24,7 @@ export class DomainsService {
     private readonly domainRepo: Repository<Domain>,
     @InjectRepository(DomainAccess)
     private readonly accessRepo: Repository<DomainAccess>,
+    private readonly cloudflareService: CloudflareService,
   ) {}
 
   async findAllForUser(user: RequestUser): Promise<Domain[]> {
@@ -31,7 +34,6 @@ export class DomainsService {
         order: { createdAt: 'DESC' },
       });
     }
-    // User sees domains they own or have delegated access to
     const owned = await this.domainRepo.find({
       where: { ownerId: user.id },
       relations: ['delegatedAccess', 'delegatedAccess.user'],
@@ -96,6 +98,78 @@ export class DomainsService {
     const access = await this.accessRepo.findOneBy({ domainId: id, userId: targetUserId });
     if (!access) throw new NotFoundException('Access record not found');
     await this.accessRepo.remove(access);
+  }
+
+  // ── Cloudflare ─────────────────────────────────────────────────────────────
+
+  async setCloudflareToken(
+    id: string,
+    token: string,
+    user: RequestUser,
+  ): Promise<{ cloudflareConnected: boolean }> {
+    const domain = await this.domainRepo.findOneBy({ id });
+    if (!domain) throw new NotFoundException('Domain not found');
+    if (user.role !== 'admin' && domain.ownerId !== user.id) {
+      throw new ForbiddenException('Only the owner or an admin can connect Cloudflare');
+    }
+    // Validate token by confirming the zone exists
+    await this.cloudflareService.validateToken(token, domain.name);
+    // Persist using a raw update so we don't pull other columns into memory
+    await this.domainRepo
+      .createQueryBuilder()
+      .update(Domain)
+      .set({ cloudflareToken: token })
+      .where('id = :id', { id })
+      .execute();
+    return { cloudflareConnected: true };
+  }
+
+  async removeCloudflareToken(id: string, user: RequestUser): Promise<void> {
+    const domain = await this.domainRepo.findOneBy({ id });
+    if (!domain) throw new NotFoundException('Domain not found');
+    if (user.role !== 'admin' && domain.ownerId !== user.id) {
+      throw new ForbiddenException('Only the owner or an admin can disconnect Cloudflare');
+    }
+    await this.domainRepo
+      .createQueryBuilder()
+      .update(Domain)
+      .set({ cloudflareToken: null })
+      .where('id = :id', { id })
+      .execute();
+  }
+
+  async applyFix(
+    id: string,
+    check: string,
+    user: RequestUser,
+  ): Promise<{ record: string; action: string }> {
+    // Explicitly select cloudflareToken (excluded by default)
+    const domain = await this.domainRepo
+      .createQueryBuilder('domain')
+      .addSelect('domain.cloudflareToken')
+      .where('domain.id = :id', { id })
+      .getOne();
+
+    if (!domain) throw new NotFoundException('Domain not found');
+    this.assertAccess(domain, user);
+
+    if (!domain.cloudflareToken) {
+      throw new BadRequestException('No Cloudflare token configured for this domain');
+    }
+
+    return this.cloudflareService.applyFix(domain.cloudflareToken, domain.name, check);
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  /** Whether a domain has a Cloudflare token set (without loading the token itself). */
+  async hasCloudflareToken(id: string): Promise<boolean> {
+    const count = await this.domainRepo
+      .createQueryBuilder('domain')
+      .addSelect('domain.cloudflareToken')
+      .where('domain.id = :id AND domain.cloudflareToken IS NOT NULL', { id })
+      .getCount();
+    return count > 0;
   }
 
   private assertAccess(domain: Domain, user: RequestUser): void {
