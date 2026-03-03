@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { domains as domainsApi, reputation as repApi, type Domain, type ReputationCheck } from '@/lib/api';
@@ -18,7 +18,10 @@ import {
 } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, CheckCircle2, ExternalLink, Link2, Link2Off, Loader2, RefreshCw, Wrench, XCircle } from 'lucide-react';
+import {
+  AlertCircle, CheckCircle2, ExternalLink, HelpCircle,
+  Link2, Link2Off, Loader2, RefreshCw, Wrench, XCircle,
+} from 'lucide-react';
 
 const DOCS: Record<string, string> = {
   mx: 'https://www.cloudflare.com/learning/dns/dns-records/dns-mx-record/',
@@ -41,16 +44,141 @@ const DOCS: Record<string, string> = {
   dbl: 'https://www.spamhaus.org/dbl/',
 };
 
-const FIXABLE = new Set(['spf', 'dmarc', 'mtaSts', 'tlsRpt', 'caa']);
-
 type CheckState = 'pass' | 'fail' | 'warn';
 
+const HELP: Record<string, Partial<Record<CheckState | 'blocked', string>>> = {
+  mx: {
+    pass: 'MX records are configured correctly. Your domain can receive email.',
+    fail: 'No MX records found. Without these your domain cannot receive email, and senders may flag it as suspicious.',
+  },
+  spf: {
+    pass: 'SPF record uses a strict policy (-all). Unauthorised servers that try to send mail from your domain will be rejected.',
+    warn: 'SPF exists but uses a permissive policy (soft fail ~all, +all, or no "all" mechanism). Spoofed email may still pass some filters — consider tightening to -all.',
+    fail: 'No SPF record found. Anyone can send email claiming to be from your domain and most mail servers will accept it.',
+  },
+  dmarc: {
+    pass: 'DMARC is fully configured with a strong policy (reject or quarantine) and aggregate reporting enabled.',
+    warn: 'DMARC exists but is not fully effective — the policy is too weak (p=none) or aggregate reports (rua=) are missing. Tighten the policy to quarantine or reject.',
+    fail: 'No DMARC record found. Email spoofing from your domain goes undetected and unreported.',
+  },
+  dkim: {
+    pass: 'DKIM signing is configured. Emails are cryptographically signed so recipients can verify they were not tampered with.',
+    fail: 'No DKIM record found. Receiving servers cannot cryptographically verify that your emails are genuine.',
+  },
+  https: {
+    pass: 'Your website is reachable over HTTPS.',
+    fail: 'HTTPS is not reachable. Your website may be down or not configured for encrypted connections.',
+  },
+  httpsRedirect: {
+    pass: 'HTTP traffic is correctly redirected to HTTPS. Visitors using plain http:// get a secure connection.',
+    fail: 'HTTP requests are not redirected to HTTPS. Visitors accessing http:// get an unencrypted connection.',
+  },
+  ssl: {
+    pass: 'SSL/TLS certificate is valid with plenty of time before it expires.',
+    warn: 'SSL certificate is expiring within 30 days. Renew it soon to avoid visitors seeing a browser security warning.',
+    fail: 'SSL certificate is invalid, self-signed, or has expired. Visitors will see a security warning and many will leave.',
+  },
+  hsts: {
+    pass: 'HSTS header is set. Browsers remember to always use HTTPS for this domain, protecting against downgrade attacks.',
+    fail: 'HSTS header is missing. Browsers may allow insecure HTTP connections even when HTTPS is available.',
+  },
+  xContentType: {
+    pass: 'X-Content-Type-Options: nosniff is set. Browsers are prevented from guessing file types, blocking a class of injection attacks.',
+    fail: 'X-Content-Type-Options header is missing. Browsers may "sniff" content types, which can enable content-injection attacks.',
+  },
+  xFrame: {
+    pass: 'X-Frame-Options is set. Your site cannot be silently embedded in another page for clickjacking attacks.',
+    fail: 'X-Frame-Options header is missing. Attackers could embed your site in an invisible iframe to trick users into clicking things.',
+  },
+  mtaSts: {
+    pass: 'MTA-STS policy is published. Mail servers are required to use TLS (encryption) when delivering mail to your domain.',
+    fail: 'No MTA-STS policy found. Emails delivered to your domain may travel without TLS encryption, exposing them to interception.',
+  },
+  tlsRpt: {
+    pass: 'TLS-RPT is configured. You will receive reports if TLS delivery to your domain fails, so you can fix problems quickly.',
+    fail: 'No TLS-RPT record found. You have no visibility into TLS delivery failures for your domain.',
+  },
+  bimi: {
+    pass: 'BIMI is configured. Your brand logo may appear next to your emails in supporting clients (e.g. Gmail).',
+    fail: 'No BIMI record found. Your logo won\'t display in email clients that support brand indicators.',
+  },
+  caa: {
+    pass: 'CAA records are set. Only the certificate authorities you listed can issue SSL certificates for your domain.',
+    fail: 'No CAA records found. Any certificate authority in the world could issue an SSL certificate for your domain.',
+  },
+  ns: {
+    pass: 'Your domain has 2 or more nameservers. If one goes down, DNS resolution continues via the others.',
+    fail: 'Fewer than 2 nameservers found. A single nameserver going offline would make your domain unreachable.',
+  },
+  ptr: {
+    pass: 'Reverse DNS (PTR) is configured. The MX server IP resolves to a hostname, which many mail servers require before accepting email.',
+    fail: 'No PTR record found for the MX server IP. Some mail servers reject email from IPs without reverse DNS configured.',
+  },
+  rbl: {
+    pass: 'Not listed on this IP blacklist.',
+    fail: 'Your sending IP is listed on this blacklist. Many mail servers will reject or junk email from your domain until it is removed.',
+    blocked: 'Unable to verify — this RBL blocked the public DNS resolver used for the check. Your IP may or may not be listed.',
+  },
+  dbl: {
+    pass: 'Your domain is not on the Spamhaus Domain Block List.',
+    fail: 'Your domain is on the Spamhaus Domain Block List. Email from your domain will be rejected or junked by servers that use this list.',
+  },
+};
+
+const FIXABLE = new Set(['spf', 'dmarc', 'mtaSts', 'tlsRpt', 'caa']);
+
+function statusFor(score: number): 'clean' | 'warning' | 'blacklisted' {
+  return score >= 80 ? 'clean' : score >= 50 ? 'warning' : 'blacklisted';
+}
+
+function HelpPopover({ help, href }: { help: string; href?: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onMouseDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [open]);
+
+  return (
+    <div className="relative shrink-0 inline-flex" ref={ref}>
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        className="p-0.5 rounded text-slate-300 hover:text-slate-500 transition-colors"
+        aria-label="What does this mean?"
+      >
+        <HelpCircle size={12} />
+      </button>
+      {open && (
+        <div className="absolute bottom-full right-0 mb-2 z-50 w-64 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+          <p className="text-xs text-slate-600 leading-relaxed">{help}</p>
+          {href && (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-1 text-[11px] text-sky-600 hover:underline"
+            >
+              Learn more <ExternalLink size={10} />
+            </a>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Check({
-  state, label, href, fixKey, onFix, fixing,
+  state, label, href, checkKey, fixKey, onFix, fixing,
 }: {
   state: CheckState;
   label: string;
   href?: string;
+  checkKey?: string;
   fixKey?: string;
   onFix?: (key: string) => void;
   fixing?: boolean;
@@ -65,21 +193,15 @@ function Check({
     : state === 'warn' ? 'text-amber-700'
     : 'text-slate-500';
 
+  const key = checkKey ?? fixKey;
+  const help = key ? HELP[key]?.[state] : undefined;
   const showFix = fixKey && FIXABLE.has(fixKey) && state !== 'pass' && onFix;
 
   return (
     <div className="flex items-center gap-2 text-sm">
       {icon}
-      <span className="flex-1">
-        {href ? (
-          <a href={href} target="_blank" rel="noopener noreferrer"
-            className={`inline-flex items-center gap-1 hover:underline underline-offset-2 ${textClass}`}>
-            {label}<ExternalLink size={11} className="shrink-0 opacity-50" />
-          </a>
-        ) : (
-          <span className={textClass}>{label}</span>
-        )}
-      </span>
+      <span className={`flex-1 ${textClass}`}>{label}</span>
+      {help && <HelpPopover help={help} href={href} />}
       {showFix && (
         <button
           onClick={() => onFix(fixKey!)}
@@ -103,20 +225,40 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function ScoreGauge({ score, status }: { score: number; status: string }) {
+function ScoreGauge({
+  score, status, size = 'md', label,
+}: {
+  score: number;
+  status: 'clean' | 'warning' | 'blacklisted';
+  size?: 'sm' | 'md' | 'lg';
+  label?: string;
+}) {
   const color = status === 'clean' ? '#10b981' : status === 'warning' ? '#f59e0b' : '#ef4444';
+  const circleClass = size === 'lg' ? 'w-24 h-24 text-3xl' : size === 'sm' ? 'w-14 h-14 text-xl' : 'w-20 h-20 text-2xl';
+  const badgeClass =
+    status === 'clean' ? 'bg-emerald-100 text-emerald-700'
+    : status === 'warning' ? 'bg-amber-100 text-amber-700'
+    : 'bg-red-100 text-red-700';
   return (
-    <div className="flex flex-col items-center gap-1.5 min-w-[80px]">
-      <div className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow"
+    <div className="flex flex-col items-center gap-1.5">
+      {label && <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{label}</p>}
+      <div className={`${circleClass} rounded-full flex items-center justify-center font-bold text-white shadow shrink-0`}
         style={{ background: color }}>
         {score}
       </div>
-      <Badge className={
-        status === 'clean' ? 'bg-emerald-100 text-emerald-700 border-0'
-        : status === 'warning' ? 'bg-amber-100 text-amber-700 border-0'
-        : 'bg-red-100 text-red-700 border-0'
-      }>{status}</Badge>
+      <Badge className={`${badgeClass} border-0 text-[11px]`}>{status}</Badge>
     </div>
+  );
+}
+
+// Compact inline score badge used in card headers
+function ScorePill({ score, status }: { score: number; status: 'clean' | 'warning' | 'blacklisted' }) {
+  const cls =
+    status === 'clean' ? 'bg-emerald-100 text-emerald-700'
+    : status === 'warning' ? 'bg-amber-100 text-amber-700'
+    : 'bg-red-100 text-red-700';
+  return (
+    <span className={`ml-auto text-base font-bold px-3 py-0.5 rounded-full ${cls}`}>{score}</span>
   );
 }
 
@@ -322,111 +464,152 @@ export default function DomainDetailPage() {
         )
       )}
 
-      {latest && d && (
+      {/* ── Score Overview ─────────────────────────────────────────────── */}
+      {latest && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center justify-between">
-              Latest Check
+              Score Overview
               <span className="text-xs text-slate-400 font-normal">{new Date(latest.checkedAt).toLocaleString()}</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-8 items-start">
-              <ScoreGauge score={latest.score} status={latest.status} />
-              <div className="flex-1 grid grid-cols-2 gap-x-8 gap-y-5">
+            <div className="flex items-end justify-around py-2">
+              <ScoreGauge score={latest.emailScore} status={statusFor(latest.emailScore)} size="md" label="Email" />
+              <ScoreGauge score={latest.score} status={latest.status} size="lg" label="Overall" />
+              <ScoreGauge score={latest.webScore} status={statusFor(latest.webScore)} size="md" label="Web" />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-                <Section title="Email Authentication">
-                  <Check state={d.mx.pass ? 'pass' : 'fail'}
-                    label={`MX Records${d.mx.records[0] ? ` (${d.mx.records[0]})` : ''}`} href={DOCS.mx} />
-                  <Check state={spfState(d.spf)} label={spfLabel(d.spf)} href={DOCS.spf}
-                    fixKey="spf" onFix={onFix} fixing={fixing === 'spf'} />
-                  <Check state={dmarcState(d.dmarc)} label={dmarcLabel(d.dmarc)} href={DOCS.dmarc}
-                    fixKey="dmarc" onFix={onFix} fixing={fixing === 'dmarc'} />
-                  <Check state={d.dkim.pass ? 'pass' : 'fail'}
-                    label={`DKIM${d.dkim.selector ? ` (${d.dkim.selector})` : ''}`} href={DOCS.dkim} />
-                </Section>
+      {/* ── Email Reputation ────────────────────────────────────────────── */}
+      {latest && d && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center">
+              Email Reputation
+              <ScorePill score={latest.emailScore} status={statusFor(latest.emailScore)} />
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
 
-                <Section title="Web Security">
-                  <Check state={d.https.pass ? 'pass' : 'fail'}
-                    label={`HTTPS${d.https.statusCode ? ` (${d.https.statusCode})` : ''}`} href={DOCS.https} />
-                  {d.httpsRedirect && (
-                    <Check state={d.httpsRedirect.pass ? 'pass' : 'fail'}
-                      label="HTTP→HTTPS Redirect" href={DOCS.httpsRedirect} />
-                  )}
-                  {d.ssl && <Check state={sslState(d.ssl)} label={sslLabel(d.ssl)} href={DOCS.ssl} />}
-                  {d.securityHeaders && (<>
-                    <Check state={d.securityHeaders.hsts ? 'pass' : 'fail'} label="HSTS" href={DOCS.hsts} />
-                    <Check state={d.securityHeaders.xContentTypeOptions ? 'pass' : 'fail'}
-                      label="X-Content-Type-Options" href={DOCS.xContentType} />
-                    <Check state={d.securityHeaders.xFrameOptions ? 'pass' : 'fail'}
-                      label="X-Frame-Options" href={DOCS.xFrame} />
-                  </>)}
-                </Section>
+            <Section title="Authentication">
+              <Check state={d.mx.pass ? 'pass' : 'fail'}
+                label={`MX Records${d.mx.records[0] ? ` (${d.mx.records[0]})` : ''}`}
+                href={DOCS.mx} checkKey="mx" />
+              <Check state={spfState(d.spf)} label={spfLabel(d.spf)} href={DOCS.spf}
+                fixKey="spf" onFix={onFix} fixing={fixing === 'spf'} />
+              <Check state={dmarcState(d.dmarc)} label={dmarcLabel(d.dmarc)} href={DOCS.dmarc}
+                fixKey="dmarc" onFix={onFix} fixing={fixing === 'dmarc'} />
+              <Check state={d.dkim.pass ? 'pass' : 'fail'}
+                label={`DKIM${d.dkim.selector ? ` (${d.dkim.selector})` : ''}`}
+                href={DOCS.dkim} checkKey="dkim" />
+            </Section>
 
-                <Section title="Email Transport Security">
-                  {d.mtaSts && (
-                    <Check state={d.mtaSts.pass ? 'pass' : 'fail'}
-                      label={`MTA-STS${d.mtaSts.policy ? ` (${d.mtaSts.policy})` : ''}`} href={DOCS.mtaSts}
-                      fixKey="mtaSts" onFix={onFix} fixing={fixing === 'mtaSts'} />
-                  )}
-                  {d.tlsRpt && (
-                    <Check state={d.tlsRpt.pass ? 'pass' : 'fail'} label="TLS Reporting (TLS-RPT)"
-                      href={DOCS.tlsRpt} fixKey="tlsRpt" onFix={onFix} fixing={fixing === 'tlsRpt'} />
-                  )}
-                  {d.bimi && (
-                    <Check state={d.bimi.pass ? 'pass' : 'fail'} label="BIMI (Brand Logo in Email)" href={DOCS.bimi} />
-                  )}
-                  {!d.mtaSts && !d.tlsRpt && !d.bimi && (
-                    <span className="text-xs text-slate-400 italic">Not checked</span>
-                  )}
-                </Section>
+            <Section title="Transport Security">
+              {d.mtaSts ? (
+                <Check state={d.mtaSts.pass ? 'pass' : 'fail'}
+                  label={`MTA-STS${d.mtaSts.policy ? ` (${d.mtaSts.policy})` : ''}`}
+                  href={DOCS.mtaSts} fixKey="mtaSts" onFix={onFix} fixing={fixing === 'mtaSts'} />
+              ) : null}
+              {d.tlsRpt ? (
+                <Check state={d.tlsRpt.pass ? 'pass' : 'fail'} label="TLS Reporting (TLS-RPT)"
+                  href={DOCS.tlsRpt} fixKey="tlsRpt" onFix={onFix} fixing={fixing === 'tlsRpt'} />
+              ) : null}
+              {d.bimi ? (
+                <Check state={d.bimi.pass ? 'pass' : 'fail'}
+                  label="BIMI (Brand Logo in Email)" href={DOCS.bimi} checkKey="bimi" />
+              ) : null}
+              {!d.mtaSts && !d.tlsRpt && !d.bimi && (
+                <span className="text-xs text-slate-400 italic">Not checked</span>
+              )}
+            </Section>
 
-                <Section title="DNS Health">
-                  {d.nsCount && (
-                    <Check state={d.nsCount.pass ? 'pass' : 'fail'}
-                      label={`Nameservers (${d.nsCount.count} found, need ≥2)`} href={DOCS.ns} />
-                  )}
-                  {d.caa && (
-                    <Check state={d.caa.pass ? 'pass' : 'fail'}
-                      label={`CAA Records${d.caa.records[0] ? ` (${d.caa.records[0]})` : ''}`} href={DOCS.caa}
-                      fixKey="caa" onFix={onFix} fixing={fixing === 'caa'} />
-                  )}
-                  {d.ptr && (
-                    <Check state={d.ptr.pass ? 'pass' : 'fail'}
-                      label={`PTR / rDNS${d.ptr.hostname ? ` (${d.ptr.hostname})` : ''}`} href={DOCS.ptr} />
-                  )}
-                  {!d.nsCount && !d.caa && !d.ptr && (
-                    <span className="text-xs text-slate-400 italic">Not checked</span>
-                  )}
-                </Section>
+            {d.ptr && (
+              <Section title="Sending Infrastructure">
+                <Check state={d.ptr.pass ? 'pass' : 'fail'}
+                  label={`PTR / rDNS${d.ptr.hostname ? ` (${d.ptr.hostname})` : ''}`}
+                  href={DOCS.ptr} checkKey="ptr" />
+              </Section>
+            )}
 
-                <div className="col-span-2">
-                  <Section title="IP Blacklists (RBL)">
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-1.5">
-                      {d.blacklists.map((bl) =>
-                        bl.blocked ? (
-                          <div key={bl.list} className="flex items-center gap-2 text-sm"
-                            title="Unable to verify — public DNS resolver blocked by this RBL">
-                            <AlertCircle size={15} className="text-amber-400 shrink-0" />
-                            <a href={DOCS.rbl} target="_blank" rel="noopener noreferrer"
-                              className="flex items-center gap-1 text-slate-400 hover:underline underline-offset-2">
-                              {bl.list} (unverifiable)<ExternalLink size={11} className="shrink-0 opacity-50" />
-                            </a>
-                          </div>
-                        ) : (
-                          <Check key={bl.list} state={bl.listed ? 'fail' : 'pass'} label={bl.list} href={DOCS.rbl} />
-                        )
-                      )}
-                      {d.dbl && (
-                        <Check state={d.dbl.listed ? 'fail' : 'pass'}
-                          label="Spamhaus DBL (domain blacklist)" href={DOCS.dbl} />
+            <Section title="IP Blacklists">
+              <div className="grid grid-cols-2 gap-x-8 gap-y-1.5">
+                {d.blacklists.map((bl) =>
+                  bl.blocked ? (
+                    <div key={bl.list} className="flex items-center gap-2 text-sm">
+                      <AlertCircle size={15} className="text-amber-400 shrink-0" />
+                      <span className="flex-1 text-slate-400">{bl.list} (unverifiable)</span>
+                      {HELP.rbl?.blocked && (
+                        <HelpPopover help={HELP.rbl.blocked} href={DOCS.rbl} />
                       )}
                     </div>
-                  </Section>
-                </div>
-
+                  ) : (
+                    <Check key={bl.list} state={bl.listed ? 'fail' : 'pass'}
+                      label={bl.list} href={DOCS.rbl} checkKey="rbl" />
+                  )
+                )}
+                {d.dbl && (
+                  <Check state={d.dbl.listed ? 'fail' : 'pass'}
+                    label="Spamhaus DBL (domain blacklist)" href={DOCS.dbl} checkKey="dbl" />
+                )}
               </div>
-            </div>
+            </Section>
+
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Web Reputation ──────────────────────────────────────────────── */}
+      {latest && d && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center">
+              Web Reputation
+              <ScorePill score={latest.webScore} status={statusFor(latest.webScore)} />
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+
+            <Section title="Web Security">
+              <Check state={d.https.pass ? 'pass' : 'fail'}
+                label={`HTTPS${d.https.statusCode ? ` (${d.https.statusCode})` : ''}`}
+                href={DOCS.https} checkKey="https" />
+              {d.httpsRedirect && (
+                <Check state={d.httpsRedirect.pass ? 'pass' : 'fail'}
+                  label="HTTP→HTTPS Redirect" href={DOCS.httpsRedirect} checkKey="httpsRedirect" />
+              )}
+              {d.ssl && (
+                <Check state={sslState(d.ssl)} label={sslLabel(d.ssl)}
+                  href={DOCS.ssl} checkKey="ssl" />
+              )}
+              {d.securityHeaders && (<>
+                <Check state={d.securityHeaders.hsts ? 'pass' : 'fail'}
+                  label="HSTS" href={DOCS.hsts} checkKey="hsts" />
+                <Check state={d.securityHeaders.xContentTypeOptions ? 'pass' : 'fail'}
+                  label="X-Content-Type-Options" href={DOCS.xContentType} checkKey="xContentType" />
+                <Check state={d.securityHeaders.xFrameOptions ? 'pass' : 'fail'}
+                  label="X-Frame-Options" href={DOCS.xFrame} checkKey="xFrame" />
+              </>)}
+            </Section>
+
+            <Section title="DNS Health">
+              {d.nsCount && (
+                <Check state={d.nsCount.pass ? 'pass' : 'fail'}
+                  label={`Nameservers (${d.nsCount.count} found, need ≥2)`}
+                  href={DOCS.ns} checkKey="ns" />
+              )}
+              {d.caa && (
+                <Check state={d.caa.pass ? 'pass' : 'fail'}
+                  label={`CAA Records${d.caa.records[0] ? ` (${d.caa.records[0]})` : ''}`}
+                  href={DOCS.caa} fixKey="caa" onFix={onFix} fixing={fixing === 'caa'} />
+              )}
+              {!d.nsCount && !d.caa && (
+                <span className="text-xs text-slate-400 italic">Not checked</span>
+              )}
+            </Section>
+
           </CardContent>
         </Card>
       )}
@@ -439,6 +622,7 @@ export default function DomainDetailPage() {
         </Card>
       )}
 
+      {/* ── Check History ───────────────────────────────────────────────── */}
       {checks.length > 1 && (
         <Card>
           <CardHeader><CardTitle className="text-base">Check History</CardTitle></CardHeader>
@@ -446,9 +630,17 @@ export default function DomainDetailPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead><TableHead>Score</TableHead><TableHead>Status</TableHead>
-                  <TableHead>MX</TableHead><TableHead>SPF</TableHead><TableHead>DMARC</TableHead>
-                  <TableHead>DKIM</TableHead><TableHead>HTTPS</TableHead><TableHead>SSL</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Overall</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Web</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>MX</TableHead>
+                  <TableHead>SPF</TableHead>
+                  <TableHead>DMARC</TableHead>
+                  <TableHead>DKIM</TableHead>
+                  <TableHead>HTTPS</TableHead>
+                  <TableHead>SSL</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -456,6 +648,8 @@ export default function DomainDetailPage() {
                   <TableRow key={c.id}>
                     <TableCell className="text-sm text-slate-500">{new Date(c.checkedAt).toLocaleString()}</TableCell>
                     <TableCell className="font-bold">{c.score}</TableCell>
+                    <TableCell className="font-semibold text-slate-600">{c.emailScore}</TableCell>
+                    <TableCell className="font-semibold text-slate-600">{c.webScore}</TableCell>
                     <TableCell>
                       <Badge className={
                         c.status === 'clean' ? 'bg-emerald-100 text-emerald-700 border-0'

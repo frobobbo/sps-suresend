@@ -154,6 +154,8 @@ export interface ReputationCheck {
   id: string;
   domainId: string;
   score: number;
+  emailScore: number;
+  webScore: number;
   status: 'clean' | 'warning' | 'blacklisted';
   details: {
     mx: { pass: boolean; records: string[] };

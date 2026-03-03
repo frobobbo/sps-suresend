@@ -110,8 +110,8 @@ export class ReputationService implements OnModuleInit {
 
   async runCheck(domainId: string, domainName: string): Promise<ReputationCheck> {
     const details = await this.gatherDetails(domainName);
-    const { score, status } = this.score(details);
-    const check = this.repo.create({ domainId, score, status, details: details as unknown });
+    const { score, emailScore, webScore, status } = this.score(details);
+    const check = this.repo.create({ domainId, score, emailScore, webScore, status, details: details as unknown });
     return this.repo.save(check) as Promise<ReputationCheck>;
   }
 
@@ -396,33 +396,56 @@ export class ReputationService implements OnModuleInit {
     );
   }
 
-  private score(details: CheckDetails): { score: number; status: 'clean' | 'warning' | 'blacklisted' } {
+  /**
+   * Email reputation score (0–100).
+   * Covers: MX, SPF, DMARC, DKIM, MTA-STS, TLS-RPT, PTR, IP blacklists, DBL.
+   */
+  private calcEmailScore(details: CheckDetails): number {
     let score = 100;
 
-    // Core email authentication
     if (!details.mx.pass) score -= 30;
 
     if (!details.spf.pass) score -= 15;
     else {
-      if (details.spf.policy === 'pass_all') score -= 5;    // "+all" allows everyone — very dangerous
-      else if (details.spf.policy === 'permissive') score -= 5; // no "all" mechanism
-      else if (details.spf.policy === 'soft_fail') score -= 3;  // "~all" is weak
-      // hard_fail: no deduction
+      if (details.spf.policy === 'pass_all') score -= 5;
+      else if (details.spf.policy === 'permissive') score -= 5;
+      else if (details.spf.policy === 'soft_fail') score -= 3;
     }
 
     if (!details.dmarc.pass) score -= 15;
     else {
-      if (details.dmarc.policy === 'none') score -= 5;       // monitoring only, no enforcement
+      if (details.dmarc.policy === 'none') score -= 5;
       else if (details.dmarc.policy === 'quarantine') score -= 2;
-      if (details.dmarc.hasRua === false) score -= 2;        // no aggregate reporting
+      if (details.dmarc.hasRua === false) score -= 2;
     }
 
     if (!details.dkim.pass) score -= 10;
 
-    // Web security — only penalise sub-checks if HTTPS is reachable
-    if (!details.https.pass) score -= 10;
-    else {
-      if (details.httpsRedirect && !details.httpsRedirect.pass) score -= 3;
+    if (details.mtaSts && !details.mtaSts.pass) score -= 5;
+    if (details.tlsRpt && !details.tlsRpt.pass) score -= 3;
+    // BIMI: brand enhancement only, no score impact
+
+    if (details.ptr && !details.ptr.pass) score -= 5;
+
+    for (const bl of details.blacklists) {
+      if (bl.listed) score -= 20;
+    }
+    if (details.dbl?.listed) score -= 20;
+
+    return Math.max(0, score);
+  }
+
+  /**
+   * Web reputation score (0–100).
+   * Covers: HTTPS, redirect, SSL, security headers, NS count, CAA.
+   */
+  private calcWebScore(details: CheckDetails): number {
+    let score = 100;
+
+    if (!details.https.pass) {
+      score -= 30;
+    } else {
+      if (details.httpsRedirect && !details.httpsRedirect.pass) score -= 5;
 
       if (details.ssl) {
         if (!details.ssl.pass) score -= 20;
@@ -433,30 +456,29 @@ export class ReputationService implements OnModuleInit {
       }
 
       if (details.securityHeaders) {
-        if (!details.securityHeaders.hsts) score -= 3;
-        if (!details.securityHeaders.xContentTypeOptions) score -= 1;
-        if (!details.securityHeaders.xFrameOptions) score -= 1;
+        if (!details.securityHeaders.hsts) score -= 5;
+        if (!details.securityHeaders.xContentTypeOptions) score -= 3;
+        if (!details.securityHeaders.xFrameOptions) score -= 3;
       }
     }
 
-    // Email transport security
-    if (details.mtaSts && !details.mtaSts.pass) score -= 3;
-    if (details.tlsRpt && !details.tlsRpt.pass) score -= 1;
-    // BIMI: no score impact — it's a brand enhancement, not a security requirement
+    if (details.nsCount && !details.nsCount.pass) score -= 8;
+    if (details.caa && !details.caa.pass) score -= 5;
 
-    // DNS health
-    if (details.caa && !details.caa.pass) score -= 3;
-    if (details.nsCount && !details.nsCount.pass) score -= 5;
-    if (details.ptr && !details.ptr.pass) score -= 3;
+    return Math.max(0, score);
+  }
 
-    // Blacklists
-    for (const bl of details.blacklists) {
-      if (bl.listed) score -= 20;
-    }
-    if (details.dbl?.listed) score -= 20;
-
-    score = Math.max(0, score);
+  private score(details: CheckDetails): {
+    score: number;
+    emailScore: number;
+    webScore: number;
+    status: 'clean' | 'warning' | 'blacklisted';
+  } {
+    const emailScore = this.calcEmailScore(details);
+    const webScore = this.calcWebScore(details);
+    // Overall: email weighted 60%, web 40% (email deliverability is the product's core focus)
+    const score = Math.max(0, Math.round(emailScore * 0.6 + webScore * 0.4));
     const status = score >= 80 ? 'clean' : score >= 50 ? 'warning' : 'blacklisted';
-    return { score, status };
+    return { score, emailScore, webScore, status };
   }
 }

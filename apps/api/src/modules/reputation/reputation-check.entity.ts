@@ -23,6 +23,12 @@ export class ReputationCheck {
   @Column({ type: 'int' })
   score!: number;
 
+  @Column({ type: 'int', default: 0 })
+  emailScore!: number;
+
+  @Column({ type: 'int', default: 0 })
+  webScore!: number;
+
   @Column({ type: 'varchar' })
   status!: 'clean' | 'warning' | 'blacklisted';
 
