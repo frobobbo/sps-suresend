@@ -377,12 +377,13 @@ export class ReputationService implements OnModuleInit {
       const req = https.get(
         { hostname: `mta-sts.${domain}`, path: '/.well-known/mta-sts.txt', timeout: 5000 },
         (res) => {
-          if ((res.statusCode ?? 0) !== 200) { resolve({ pass: false }); return; }
           let body = '';
           res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
           res.on('end', () => {
-            const m = /^mode:\s*(.+)$/m.exec(body);
-            resolve({ pass: true, policy: m?.[1]?.trim() });
+            if ((res.statusCode ?? 0) !== 200) { resolve({ pass: false }); return; }
+            const m = /^mode:\s*(\S+)/m.exec(body);
+            const policy = m?.[1]?.trim();
+            resolve({ pass: policy === 'enforce', policy });
           });
         },
       );
