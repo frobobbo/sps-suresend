@@ -643,44 +643,26 @@ export class ReputationService implements OnModuleInit {
     });
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise((r) => setTimeout(r, ms));
-  }
-
   /**
-   * Mozilla Observatory — grades HTTP security header configuration.
-   * Uses the v1 API. Grade A/A+ = pass.
+   * Mozilla Observatory v2 — grades HTTP security header configuration.
+   * The v1 API was shut down Oct 31 2024; v2 is synchronous (no polling needed).
+   * Grade A/A+ = pass.
    */
   private async checkMozillaObservatory(
     domain: string,
   ): Promise<{ pass: boolean; grade: string | null; score: number | null }> {
     const fail = { pass: false, grade: null as string | null, score: null as number | null };
     try {
-      // Trigger scan (POST, params in query string)
-      const post = await this.httpsPostJson(
-        'http-observatory.security.mozilla.org',
-        `/api/v1/analyze?host=${encodeURIComponent(domain)}&hidden=true&rescan=true`,
+      const res = await this.httpsPostJson(
+        'observatory-api.mdn.mozilla.net',
+        `/api/v2/scan?host=${encodeURIComponent(domain)}`,
         '',
       );
-      const initial = post.json as Record<string, unknown>;
-      if (initial.state === 'FINISHED') {
-        const grade = (initial.grade as string | null) ?? null;
-        return { pass: (grade ?? '').startsWith('A'), grade, score: (initial.score as number | null) ?? null };
-      }
-      // Poll up to 3 times, 4 s apart
-      for (let i = 0; i < 3; i++) {
-        await this.sleep(4000);
-        const poll = await this.httpsGetJson(
-          'http-observatory.security.mozilla.org',
-          `/api/v1/analyze?host=${encodeURIComponent(domain)}`,
-        );
-        const r = poll.json as Record<string, unknown>;
-        if (r.state === 'FINISHED') {
-          const grade = (r.grade as string | null) ?? null;
-          return { pass: (grade ?? '').startsWith('A'), grade, score: (r.score as number | null) ?? null };
-        }
-      }
-      return fail;
+      if (res.status !== 200) return fail;
+      const data = res.json as { grade?: string; score?: number; error?: string };
+      if (data.error || !data.grade) return fail;
+      const grade = data.grade;
+      return { pass: grade.startsWith('A'), grade, score: data.score ?? null };
     } catch {
       return fail;
     }
@@ -720,9 +702,10 @@ export class ReputationService implements OnModuleInit {
   }
 
   /**
-   * Qualys SSL Labs v3 — deep SSL/TLS grading.
-   * Tries the cache first; initiates a fresh scan and polls up to 15 s if not cached.
-   * Returns pending=true if the scan isn't complete within the timeout.
+   * Qualys SSL Labs v4 — deep SSL/TLS grading.
+   * Tries the cache first; if no cached result, kicks off a background scan and
+   * returns pending=true. The next run (60-90s later) will hit the cache.
+   * v3 was deprecated Dec 31 2023; now uses v4.
    */
   private async checkSslLabs(
     domain: string,
@@ -733,10 +716,10 @@ export class ReputationService implements OnModuleInit {
       ((data.endpoints as { grade?: string }[] | undefined)?.[0]?.grade) ?? null;
 
     try {
-      // 1. Try cache
+      // 1. Try cache (v4 endpoint)
       const cached = await this.httpsGetJson(
         'api.ssllabs.com',
-        `/api/v3/analyze?host=${encodeURIComponent(domain)}&fromCache=on&maxAge=24&all=done`,
+        `/api/v4/analyze?host=${encodeURIComponent(domain)}&fromCache=on&maxAge=24&all=done`,
       );
       const cachedData = cached.json as Record<string, unknown>;
       if (cachedData.status === 'READY') {
@@ -744,30 +727,12 @@ export class ReputationService implements OnModuleInit {
         if (grade) return { pass: !grade.startsWith('F') && grade !== 'T', grade, pending: false };
       }
 
-      // 2. Not cached — initiate new scan
-      const start = await this.httpsGetJson(
+      // 2. Not cached — kick off scan in the background and return pending.
+      //    SSL Labs takes 60-90s minimum; the next scan run will hit the cache.
+      this.httpsGetJson(
         'api.ssllabs.com',
-        `/api/v3/analyze?host=${encodeURIComponent(domain)}&startNew=on&all=done`,
-      );
-      const startData = start.json as Record<string, unknown>;
-      if (startData.status === 'READY') {
-        const grade = extractGrade(startData);
-        if (grade) return { pass: !grade.startsWith('F') && grade !== 'T', grade, pending: false };
-      }
-
-      // 3. Poll up to 3 × 5 s = 15 s
-      for (let i = 0; i < 3; i++) {
-        await this.sleep(5000);
-        const poll = await this.httpsGetJson(
-          'api.ssllabs.com',
-          `/api/v3/analyze?host=${encodeURIComponent(domain)}&all=done`,
-        );
-        const pollData = poll.json as Record<string, unknown>;
-        if (pollData.status === 'READY') {
-          const grade = extractGrade(pollData);
-          if (grade) return { pass: !grade.startsWith('F') && grade !== 'T', grade, pending: false };
-        }
-      }
+        `/api/v4/analyze?host=${encodeURIComponent(domain)}&startNew=on&all=done`,
+      ).catch(() => {});
       return { pass: false, grade: null, pending: true };
     } catch {
       return fail;
