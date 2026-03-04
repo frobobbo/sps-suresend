@@ -604,10 +604,10 @@ export class ReputationService implements OnModuleInit {
 
   // ── External security assessments ────────────────────────────────────────────
 
-  private httpsGetJson(hostname: string, path: string): Promise<{ status: number; json: unknown }> {
+  private httpsGetJson(hostname: string, path: string, extraHeaders: Record<string, string> = {}): Promise<{ status: number; json: unknown }> {
     return new Promise((resolve, reject) => {
       const req = https.get(
-        { hostname, path, timeout: 8000, headers: { 'User-Agent': 'SureSend-Monitor/1.0', Accept: 'application/json' } },
+        { hostname, path, timeout: 8000, headers: { 'User-Agent': 'SureSend-Monitor/1.0', Accept: 'application/json', ...extraHeaders } },
         (res) => {
           let body = '';
           res.on('data', (c: Buffer) => { body += c.toString(); });
@@ -625,8 +625,11 @@ export class ReputationService implements OnModuleInit {
   private httpsPostJson(hostname: string, path: string, body: string): Promise<{ status: number; json: unknown }> {
     return new Promise((resolve, reject) => {
       const buf = Buffer.from(body, 'utf8');
+      const extraHeaders = buf.length > 0
+        ? { 'Content-Type': 'application/json', 'Content-Length': buf.length }
+        : {};
       const req = https.request(
-        { method: 'POST', hostname, path, timeout: 8000, headers: { 'Content-Type': 'application/json', 'Content-Length': buf.length, 'User-Agent': 'SureSend-Monitor/1.0' } },
+        { method: 'POST', hostname, path, timeout: 8000, headers: { ...extraHeaders, 'User-Agent': 'SureSend-Monitor/1.0' } },
         (res) => {
           let resp = '';
           res.on('data', (c: Buffer) => { resp += c.toString(); });
@@ -715,11 +718,14 @@ export class ReputationService implements OnModuleInit {
     const extractGrade = (data: Record<string, unknown>): string | null =>
       ((data.endpoints as { grade?: string }[] | undefined)?.[0]?.grade) ?? null;
 
+    const email = process.env.SSLLABS_EMAIL ?? 'monitor@suresend.io';
+
     try {
-      // 1. Try cache (v4 endpoint)
+      // 1. Try cache (v4 endpoint — requires email header)
       const cached = await this.httpsGetJson(
         'api.ssllabs.com',
         `/api/v4/analyze?host=${encodeURIComponent(domain)}&fromCache=on&maxAge=24&all=done`,
+        { email },
       );
       const cachedData = cached.json as Record<string, unknown>;
       if (cachedData.status === 'READY') {
@@ -732,6 +738,7 @@ export class ReputationService implements OnModuleInit {
       this.httpsGetJson(
         'api.ssllabs.com',
         `/api/v4/analyze?host=${encodeURIComponent(domain)}&startNew=on&all=done`,
+        { email },
       ).catch(() => {});
       return { pass: false, grade: null, pending: true };
     } catch {
