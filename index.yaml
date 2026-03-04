@@ -2,6 +2,32 @@ apiVersion: v1
 entries:
   suresend:
   - apiVersion: v2
+    appVersion: 1.3.2
+    created: "2026-03-04T18:25:34.768570772Z"
+    dependencies:
+    - condition: postgresql.enabled
+      name: postgresql
+      repository: https://charts.bitnami.com/bitnami
+      version: '>=15.0.0'
+    description: StrategyPlus SureSend — email reputation monitoring platform
+    digest: 5336fb8cca96f42043923c9bdbebc56133288084a7eec3aec94123aeb34a400b
+    home: https://github.com/frobobbo/sps-suresend
+    keywords:
+    - email
+    - reputation
+    - smtp
+    - dns
+    - monitoring
+    maintainers:
+    - name: StrategyPlus
+    name: suresend
+    sources:
+    - https://github.com/frobobbo/sps-suresend
+    type: application
+    urls:
+    - https://github.com/frobobbo/sps-suresend/releases/download/suresend-1.3.2/suresend-1.3.2.tgz
+    version: 1.3.2
+  - apiVersion: v2
     appVersion: 1.3.1
     created: "2026-03-04T18:14:14.285995758Z"
     dependencies:
@@ -516,4 +542,4 @@ entries:
     urls:
     - https://github.com/frobobbo/sps-suresend/releases/download/suresend-0.1.3/suresend-0.1.3.tgz
     version: 0.1.3
-generated: "2026-03-04T18:14:14.286133535Z"
+generated: "2026-03-04T18:25:34.768750236Z"
