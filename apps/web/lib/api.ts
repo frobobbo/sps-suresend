@@ -120,6 +120,26 @@ export const domains = {
     }),
 };
 
+// ─── Settings ─────────────────────────────────────────────────────────────────
+
+export interface EmailSettings {
+  apiKey: string | null;
+  domain: string | null;
+  from: string | null;
+  source: 'database' | 'env' | 'none';
+  configured: boolean;
+}
+
+export const settings = {
+  getEmail: () => apiFetch<EmailSettings>('/settings/email'),
+
+  setEmail: (body: { apiKey?: string; domain?: string; from?: string }) =>
+    apiFetch<{ ok: boolean }>('/settings/email', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+};
+
 // ─── Reputation ───────────────────────────────────────────────────────────────
 
 export const reputation = {

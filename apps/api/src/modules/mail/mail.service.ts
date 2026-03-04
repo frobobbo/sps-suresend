@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
+import { SettingsService } from '../settings/settings.service';
 
 export interface ReportPayload {
   domainName: string;
@@ -16,21 +17,29 @@ export interface ReportPayload {
 export class MailService {
   private readonly logger = new Logger(MailService.name);
 
-  private isConfigured(): boolean {
-    return !!(process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN);
+  constructor(private readonly settingsService: SettingsService) {}
+
+  private async getConfig(): Promise<{ apiKey: string; domain: string; from: string } | null> {
+    const cfg = await this.settingsService.getEmailConfig();
+    const apiKey = cfg.apiKey ?? process.env.MAILGUN_API_KEY ?? null;
+    const domain = cfg.domain ?? process.env.MAILGUN_DOMAIN ?? null;
+    if (!apiKey || !domain) return null;
+    const from = cfg.from ?? process.env.MAILGUN_FROM ?? `noreply@${domain}`;
+    return { apiKey, domain, from };
   }
 
   async sendReputationReport(toEmail: string, report: ReportPayload): Promise<void> {
-    if (!this.isConfigured()) {
-      this.logger.debug('Mailgun not configured — skipping email report (set MAILGUN_API_KEY and MAILGUN_DOMAIN)');
+    const config = await this.getConfig();
+    if (!config) {
+      this.logger.debug('Mailgun not configured — skipping email report');
       return;
     }
 
-    const mg = new Mailgun(FormData).client({ username: 'api', key: process.env.MAILGUN_API_KEY! });
+    const mg = new Mailgun(FormData).client({ username: 'api', key: config.apiKey });
 
     try {
-      await mg.messages.create(process.env.MAILGUN_DOMAIN!, {
-        from: process.env.MAILGUN_FROM ?? `SureSend <noreply@${process.env.MAILGUN_DOMAIN}>`,
+      await mg.messages.create(config.domain, {
+        from: config.from,
         to: [toEmail],
         subject: `SureSend Report — ${report.domainName} (${report.status})`,
         html: buildReportHtml(report),

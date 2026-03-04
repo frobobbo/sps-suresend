@@ -9,6 +9,7 @@ import { HealthModule } from './modules/health/health.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { WorkspacesModule } from './modules/workspaces/workspaces.module';
 import { SeedModule } from './seed/seed.module';
+import { SettingsModule } from './modules/settings/settings.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { SeedModule } from './seed/seed.module';
     SubscriptionsModule,
     WorkspacesModule,
     SeedModule,
+    SettingsModule,
   ],
 })
 export class AppModule {}

@@ -178,6 +178,19 @@ export class DomainsService {
     return count > 0;
   }
 
+  /** Returns the set of domain IDs (from the given list) that have a CF token. */
+  async getCfConnectedIds(ids: string[]): Promise<Set<string>> {
+    if (!ids.length) return new Set();
+    const rows = await this.domainRepo
+      .createQueryBuilder('d')
+      .addSelect('d.cloudflareToken')
+      .select('d.id', 'id')
+      .where('d.id IN (:...ids)', { ids })
+      .andWhere('d.cloudflareToken IS NOT NULL')
+      .getRawMany<{ id: string }>();
+    return new Set(rows.map((r) => r.id));
+  }
+
   private assertAccess(domain: Domain, user: RequestUser): void {
     if (user.role === 'admin') return;
     if (domain.ownerId === user.id) return;

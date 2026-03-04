@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { BarChart3, Globe, LogOut, Users } from 'lucide-react';
+import { BarChart3, Globe, LogOut, Settings2 } from 'lucide-react';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
@@ -14,7 +14,7 @@ const NAV_ITEMS = [
 ];
 
 const ADMIN_ITEMS = [
-  { href: '/users', label: 'Users', icon: Users },
+  { href: '/settings', label: 'Settings', icon: Settings2 },
 ];
 
 export function Nav() {
@@ -78,7 +78,7 @@ export function Nav() {
           Sign out
         </Button>
         <div className="text-right px-1 mt-2 text-[10px]" style={{ color: 'oklch(0.38 0.02 228)' }}>
-          v1.3.3
+          v1.3.4
         </div>
       </div>
     </aside>

@@ -31,7 +31,8 @@ export class DomainsController {
   @Get()
   async findAll(@CurrentUser() user: any) {
     const domains = await this.domainsService.findAllForUser(user);
-    return domains.map((d) => safeDto(d));
+    const cfIds = await this.domainsService.getCfConnectedIds(domains.map((d) => d.id));
+    return domains.map((d) => ({ ...safeDto(d), cloudflareConnected: cfIds.has(d.id) }));
   }
 
   @Post()

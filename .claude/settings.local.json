@@ -51,12 +51,29 @@
       "Bash(curl -s \"https://registry.hub.docker.com/v2/repositories/mvance/unbound/tags?page_size=10\")",
       "Bash(python3 -c \"import json,sys; [print\\(t[''name'']\\) for t in json.load\\(sys.stdin\\).get\\(''results'',[]\\)]\")",
       "Bash(git add apps/api/src/modules/domains/ apps/web/lib/api.ts \"apps/web/app/domains/[id]/page.tsx\")",
-      "Bash(git add -A)"
+      "Bash(git add -A)",
+      "Bash(git add apps/api/src/modules/reputation/reputation.service.ts apps/api/src/modules/domains/cloudflare.service.ts apps/web/lib/api.ts \"apps/web/app/domains/[id]/page.tsx\")",
+      "Bash(git add apps/api/src/modules/reputation/reputation.service.ts apps/api/src/modules/domains/cloudflare.service.ts apps/api/src/modules/domains/domains.controller.ts apps/api/src/modules/domains/domains.service.ts apps/web/lib/api.ts \"apps/web/app/domains/[id]/page.tsx\")",
+      "Bash(git add apps/api/src/modules/reputation/reputation.service.ts helm/suresend/Chart.yaml)",
+      "Bash(curl -sv --max-time 5 https://mta-sts.strategyplussolutions.com/.well-known/mta-sts.txt)",
+      "Bash(curl -sL --max-time 5 https://www.strategyplussolutions.com/.well-known/mta-sts.txt)",
+      "Bash(head -200 /home/brett/Documents/projects/sps-suresend/apps/web/app/domains/[id]/page.tsx)",
+      "Bash(grep -n \"canManage\" /home/brett/Documents/projects/sps-suresend/apps/web/app/domains/[id]/page.tsx)",
+      "Bash(sed -n '620,660p' /home/brett/Documents/projects/sps-suresend/apps/web/app/domains/[id]/page.tsx)",
+      "Bash(pnpm add nodemailer)",
+      "Bash(pnpm add -D @types/nodemailer)",
+      "Bash(npm install -g pnpm)",
+      "Bash(pnpm install)",
+      "Bash(pnpm typecheck)",
+      "Bash(pnpm remove nodemailer)",
+      "Bash(pnpm remove -D @types/nodemailer)",
+      "Bash(pnpm add mailgun.js form-data)"
     ],
     "additionalDirectories": [
       "/home/brett/Documents/projects/sps-suresend/apps/api/src",
       "/home/brett/Documents/projects/sps-suresend/apps/web/app/domains",
-      "/home/brett/Documents/projects/sps-suresend/apps/web/app/domains/[id]"
+      "/home/brett/Documents/projects/sps-suresend/apps/web/app/domains/[id]",
+      "/home/brett/.claude/projects/-home-brett-Documents-projects-sps-suresend"
     ]
   }
 }
