@@ -567,6 +567,7 @@ export default function DomainDetailPage() {
   const [cfError, setCfError] = useState('');
   const [dkimDialogOpen, setDkimDialogOpen] = useState(false);
   const [bimiDialogOpen, setBimiDialogOpen] = useState(false);
+  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !user) router.replace('/login');
@@ -628,11 +629,14 @@ export default function DomainDetailPage() {
   }
 
   const canManage = domain && user && (user.role === 'admin' || domain.ownerId === user.id);
+  const canFix = user && (user.role === 'admin' || user.tier !== 'free');
   if (isLoading || !user || !domain) return null;
 
   const latest = checks[0];
   const d = latest?.details;
-  const onFix = domain.cloudflareConnected && canManage ? handleFix : undefined;
+  const onFix = domain.cloudflareConnected && canManage
+    ? (canFix ? handleFix : () => setUpgradeDialogOpen(true))
+    : undefined;
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -794,7 +798,7 @@ export default function DomainDetailPage() {
                     <span className="flex-1 text-slate-500">DKIM</span>
                     {HELP.dkim?.fail && <HelpPopover help={HELP.dkim.fail} href={DOCS.dkim} />}
                     <button
-                      onClick={() => setDkimDialogOpen(true)}
+                      onClick={() => canFix ? setDkimDialogOpen(true) : setUpgradeDialogOpen(true)}
                       disabled={fixing === 'dkim-google' || fixing === 'dkim-microsoft'}
                       className="shrink-0 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border border-sky-200 bg-sky-50 text-sky-600 hover:bg-sky-100 font-medium transition-colors disabled:opacity-50"
                     >
@@ -832,7 +836,7 @@ export default function DomainDetailPage() {
                       <span className="flex-1 text-slate-500">BIMI (Brand Logo in Email)</span>
                       {HELP.bimi?.fail && <HelpPopover help={HELP.bimi.fail} href={DOCS.bimi} />}
                       <button
-                        onClick={() => setBimiDialogOpen(true)}
+                        onClick={() => canFix ? setBimiDialogOpen(true) : setUpgradeDialogOpen(true)}
                         disabled={fixing === 'bimi'}
                         className="shrink-0 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border border-sky-200 bg-sky-50 text-sky-600 hover:bg-sky-100 font-medium transition-colors disabled:opacity-50"
                       >
@@ -990,6 +994,16 @@ export default function DomainDetailPage() {
           onSubmit={async (payload) => { await handleFix('bimi', payload); }}
         />
       )}
+      <Dialog open={upgradeDialogOpen} onOpenChange={(o) => !o && setUpgradeDialogOpen(false)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Plus Feature</DialogTitle></DialogHeader>
+          <p className="text-sm text-slate-600 mt-1">
+            Auto-fix is available on the <strong className="text-sky-600">Plus</strong> plan.
+            Contact your administrator to upgrade your account.
+          </p>
+          <Button className="mt-4 w-full" onClick={() => setUpgradeDialogOpen(false)}>Close</Button>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Check History ───────────────────────────────────────────────── */}
       {checks.length > 1 && (

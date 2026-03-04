@@ -23,6 +23,9 @@ export class User {
   @Column({ type: 'varchar', default: 'user' })
   role!: 'admin' | 'user';
 
+  @Column({ type: 'varchar', default: 'free' })
+  tier!: 'free' | 'plus' | 'pro';
+
   @OneToMany(() => Domain, (domain) => domain.owner)
   domains!: Domain[];
 

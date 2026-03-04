@@ -69,6 +69,12 @@ export const users = {
       body: JSON.stringify({ role }),
     }),
 
+  updateTier: (id: string, tier: 'free' | 'plus' | 'pro') =>
+    apiFetch<User>(`/users/${id}/tier`, {
+      method: 'PATCH',
+      body: JSON.stringify({ tier }),
+    }),
+
   remove: (id: string) =>
     apiFetch<void>(`/users/${id}`, { method: 'DELETE' }),
 };
@@ -132,6 +138,7 @@ export interface User {
   id: string;
   email: string;
   role: 'admin' | 'user';
+  tier: 'free' | 'plus' | 'pro';
   createdAt: string;
 }
 

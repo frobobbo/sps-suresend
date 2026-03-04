@@ -51,6 +51,18 @@ export class UsersController {
     return safe;
   }
 
+  @Patch(':id/tier')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  async updateTier(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { tier: 'free' | 'plus' | 'pro' },
+  ) {
+    const user = await this.usersService.updateTier(id, body.tier);
+    const { password: _, ...safe } = user;
+    return safe;
+  }
+
   @Delete(':id')
   @UseGuards(RolesGuard)
   @Roles('admin')

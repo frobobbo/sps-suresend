@@ -15,6 +15,7 @@ import { CreateDomainDto, DelegateAccessDto } from './domains.dto';
 interface RequestUser {
   id: string;
   role: 'admin' | 'user';
+  tier: 'free' | 'plus' | 'pro';
 }
 
 @Injectable()
@@ -153,6 +154,10 @@ export class DomainsService {
 
     if (!domain) throw new NotFoundException('Domain not found');
     this.assertAccess(domain, user);
+
+    if (user.role !== 'admin' && user.tier === 'free') {
+      throw new ForbiddenException('Upgrade to Plus to use auto-fix features');
+    }
 
     if (!domain.cloudflareToken) {
       throw new BadRequestException('No Cloudflare token configured for this domain');

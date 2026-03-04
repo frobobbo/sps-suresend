@@ -44,6 +44,12 @@ export class UsersService {
     return this.repo.save(user);
   }
 
+  async updateTier(id: string, tier: 'free' | 'plus' | 'pro'): Promise<User> {
+    const user = await this.findOne(id);
+    user.tier = tier;
+    return this.repo.save(user);
+  }
+
   async remove(id: string): Promise<void> {
     const user = await this.findOne(id);
     await this.repo.remove(user);

@@ -81,6 +81,11 @@ export default function UsersPage() {
     setUserList((prev) => prev.map((u) => (u.id === id ? updated : u)));
   }
 
+  async function handleTierChange(id: string, newTier: 'free' | 'plus' | 'pro') {
+    const updated = await usersApi.updateTier(id, newTier);
+    setUserList((prev) => prev.map((u) => (u.id === id ? updated : u)));
+  }
+
   async function handleDelete(id: string) {
     if (!confirm('Delete this user?')) return;
     await usersApi.remove(id);
@@ -193,6 +198,7 @@ export default function UsersPage() {
               <TableHead className="w-8" />
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
+              <TableHead>Tier</TableHead>
               <TableHead>Joined</TableHead>
               <TableHead className="w-12" />
             </TableRow>
@@ -238,6 +244,27 @@ export default function UsersPage() {
                         <SelectContent>
                           <SelectItem value="user">User</SelectItem>
                           <SelectItem value="admin">Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Select
+                        value={u.tier ?? 'free'}
+                        onValueChange={(v) => handleTierChange(u.id, v as 'free' | 'plus' | 'pro')}
+                      >
+                        <SelectTrigger className="w-24 h-7 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="free">
+                            <span className="text-slate-500">Free</span>
+                          </SelectItem>
+                          <SelectItem value="plus">
+                            <span className="text-sky-600">Plus</span>
+                          </SelectItem>
+                          <SelectItem value="pro">
+                            <span className="text-violet-600">Pro</span>
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </TableCell>
