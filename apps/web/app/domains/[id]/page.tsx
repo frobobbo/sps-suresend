@@ -634,8 +634,12 @@ export default function DomainDetailPage() {
 
   const latest = checks[0];
   const d = latest?.details;
-  const onFix = domain.cloudflareConnected && canManage
-    ? (canFix ? handleFix : () => setUpgradeDialogOpen(true))
+  // Free-tier users always see fix buttons (clicking opens upgrade dialog).
+  // Plus/Pro users only see them when Cloudflare is connected.
+  const onFix = canManage
+    ? (canFix
+        ? (domain.cloudflareConnected ? handleFix : undefined)
+        : () => setUpgradeDialogOpen(true))
     : undefined;
 
   return (
@@ -792,7 +796,7 @@ export default function DomainDetailPage() {
                   fixKey="spf" onFix={onFix} fixing={fixing === 'spf'} />
                 <Check state={dmarcState(d.dmarc)} label={dmarcLabel(d.dmarc)} href={DOCS.dmarc}
                   fixKey="dmarc" onFix={onFix} fixing={fixing === 'dmarc'} />
-                {!d.dkim.pass && d.mx.mailProvider && domain.cloudflareConnected && canManage ? (
+                {!d.dkim.pass && d.mx.mailProvider && (domain.cloudflareConnected || !canFix) && canManage ? (
                   <div className="flex items-center gap-2 text-sm rounded-md px-1.5 -mx-1.5 hover:bg-slate-50 transition-colors">
                     <XCircle size={15} className="text-red-400 shrink-0" />
                     <span className="flex-1 text-slate-500">DKIM</span>
@@ -830,7 +834,7 @@ export default function DomainDetailPage() {
                     href={DOCS.tlsRpt} fixKey="tlsRpt" onFix={onFix} fixing={fixing === 'tlsRpt'} />
                 ) : null}
                 {d.bimi ? (
-                  !d.bimi.pass && domain.cloudflareConnected && canManage ? (
+                  !d.bimi.pass && (domain.cloudflareConnected || !canFix) && canManage ? (
                     <div className="flex items-center gap-2 text-sm rounded-md px-1.5 -mx-1.5 hover:bg-slate-50 transition-colors">
                       <XCircle size={15} className="text-red-400 shrink-0" />
                       <span className="flex-1 text-slate-500">BIMI (Brand Logo in Email)</span>
