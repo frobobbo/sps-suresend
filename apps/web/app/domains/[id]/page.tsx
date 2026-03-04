@@ -629,7 +629,7 @@ export default function DomainDetailPage() {
   }
 
   const canManage = domain && user && (user.role === 'admin' || domain.ownerId === user.id);
-  const canFix = user && (user.role === 'admin' || user.tier !== 'free');
+  const canFix = user && (user.role === 'admin' || (user.tier ?? 'free') !== 'free');
   if (isLoading || !user || !domain) return null;
 
   const latest = checks[0];

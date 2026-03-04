@@ -28,4 +28,10 @@ export class AuthService {
     const payload = { sub: user.id, email: user.email, role: user.role, tier: user.tier };
     return { access_token: this.jwtService.sign(payload) };
   }
+
+  async me(id: string): Promise<Omit<User, 'password'>> {
+    const user = await this.usersService.findOne(id);
+    const { password: _, ...safe } = user as User & { password: string };
+    return safe;
+  }
 }

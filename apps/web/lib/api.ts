@@ -49,7 +49,7 @@ export const auth = {
       body: JSON.stringify({ email, password }),
     }),
 
-  me: () => apiFetch<{ id: string; email: string; role: string }>('/auth/me'),
+  me: () => apiFetch<{ id: string; email: string; role: string; tier: 'free' | 'plus' | 'pro' }>('/auth/me'),
 };
 
 // ─── Users ────────────────────────────────────────────────────────────────────

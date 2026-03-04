@@ -11,7 +11,6 @@ import { AuthService } from './auth.service';
 import { LoginDto, RegisterDto } from './auth.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
-import { User } from '../users/user.entity';
 
 @Controller('auth')
 export class AuthController {
@@ -33,8 +32,7 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
-  me(@CurrentUser() user: User) {
-    const { password: _, ...safe } = user as any;
-    return safe;
+  me(@CurrentUser() user: { id: string }) {
+    return this.authService.me(user.id);
   }
 }
