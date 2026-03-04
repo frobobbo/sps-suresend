@@ -5,6 +5,7 @@ import { User } from '../modules/users/user.entity';
 import { Domain } from '../modules/domains/domain.entity';
 import { DomainAccess } from '../modules/domains/domain-access.entity';
 import { ReputationCheck } from '../modules/reputation/reputation-check.entity';
+import { AppSetting } from '../modules/settings/app-setting.entity';
 
 @Module({
   imports: [
@@ -13,7 +14,7 @@ import { ReputationCheck } from '../modules/reputation/reputation-check.entity';
       useFactory: (config: ConfigService) => ({
         type: 'postgres',
         url: config.get<string>('DATABASE_URL'),
-        entities: [User, Domain, DomainAccess, ReputationCheck],
+        entities: [User, Domain, DomainAccess, ReputationCheck, AppSetting],
         // TODO: replace with migrations before production
         synchronize: true,
         ssl: config.get('DATABASE_SSL') === 'true' ? { rejectUnauthorized: false } : false,
