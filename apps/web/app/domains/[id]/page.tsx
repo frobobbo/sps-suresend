@@ -50,6 +50,9 @@ const DOCS: Record<string, string> = {
   domainExpiry: 'https://www.icann.org/resources/pages/register-domain-name-2017-06-20-en',
   rbl: 'https://www.spamhaus.org/zen/',
   dbl: 'https://www.spamhaus.org/dbl/',
+  observatory: 'https://observatory.mozilla.org/',
+  safeBrowsing: 'https://safebrowsing.google.com/',
+  sslLabs: 'https://www.ssllabs.com/ssltest/',
 };
 
 type CheckState = 'pass' | 'fail' | 'warn';
@@ -168,6 +171,20 @@ const HELP: Record<string, Partial<Record<CheckState | 'blocked', string>>> = {
   dbl: {
     pass: 'Your domain is not on the Spamhaus Domain Block List.',
     fail: 'Your domain is on the Spamhaus Domain Block List. Email from your domain will be rejected or junked by servers that use this list.',
+  },
+  observatory: {
+    pass: 'Mozilla Observatory rates your site\'s HTTP security header configuration as A or A+. Excellent.',
+    warn: 'Mozilla Observatory grades your site B or C. Some security headers are missing or misconfigured. Review the Observatory report for specific recommendations.',
+    fail: 'Mozilla Observatory grades your site D or F. Critical HTTP security headers are missing. Visit observatory.mozilla.org for a detailed remediation guide.',
+  },
+  safeBrowsing: {
+    pass: 'Google Safe Browsing found no malware, phishing, or unwanted software associated with this domain.',
+    fail: 'Google Safe Browsing has flagged this domain for malware, phishing, or unwanted software. Visitors using Chrome, Firefox, or Safari may see a warning page.',
+  },
+  sslLabs: {
+    pass: 'Qualys SSL Labs rates your TLS configuration A or A+. Strong cipher suites, certificate chain, and protocol support.',
+    warn: 'Qualys SSL Labs rates your TLS configuration B or C. Some TLS configuration improvements are recommended.',
+    fail: 'Qualys SSL Labs rates your TLS configuration D or F, or there are certificate trust issues. Visitors may see security warnings.',
   },
 };
 
@@ -549,6 +566,18 @@ function sslState(ssl: NonNullable<ReputationCheck['details']['ssl']>): CheckSta
   if (!ssl.pass) return 'fail';
   if (ssl.daysUntilExpiry !== null && ssl.daysUntilExpiry < 30) return 'warn';
   return 'pass';
+}
+function observatoryState(obs: NonNullable<ReputationCheck['details']['observatory']>): CheckState {
+  if (!obs.grade) return 'fail';
+  if (obs.grade.startsWith('A')) return 'pass';
+  if (obs.grade.startsWith('B') || obs.grade.startsWith('C')) return 'warn';
+  return 'fail';
+}
+function sslLabsState(sl: NonNullable<ReputationCheck['details']['sslLabs']>): CheckState {
+  if (!sl.grade) return sl.pending ? 'warn' : 'fail';
+  if (sl.grade.startsWith('A')) return 'pass';
+  if (sl.grade.startsWith('B') || sl.grade.startsWith('C')) return 'warn';
+  return 'fail';
 }
 
 export default function DomainDetailPage() {
@@ -960,6 +989,35 @@ export default function DomainDetailPage() {
                   <span className="text-xs text-slate-400 italic">Not checked</span>
                 )}
               </Section>
+
+              {(d.observatory || d.safeBrowsing || d.sslLabs) && (
+                <Section title="External Assessments">
+                  {d.observatory && (
+                    <Check
+                      state={observatoryState(d.observatory)}
+                      label={`Mozilla Observatory${d.observatory.grade ? ` (${d.observatory.grade})` : ' (unavailable)'}`}
+                      href={DOCS.observatory}
+                      checkKey="observatory"
+                    />
+                  )}
+                  {d.safeBrowsing && (
+                    <Check
+                      state={d.safeBrowsing.pass ? 'pass' : 'fail'}
+                      label={`Google Safe Browsing${!d.safeBrowsing.pass && d.safeBrowsing.threats.length ? ` (${d.safeBrowsing.threats.join(', ')})` : ''}`}
+                      href={DOCS.safeBrowsing}
+                      checkKey="safeBrowsing"
+                    />
+                  )}
+                  {d.sslLabs && (
+                    <Check
+                      state={sslLabsState(d.sslLabs)}
+                      label={`SSL Labs${d.sslLabs.grade ? ` (${d.sslLabs.grade})` : d.sslLabs.pending ? ' (scan in progress)' : ' (unavailable)'}`}
+                      href={DOCS.sslLabs}
+                      checkKey="sslLabs"
+                    />
+                  )}
+                </Section>
+              )}
 
             </CardContent>
           </Card>

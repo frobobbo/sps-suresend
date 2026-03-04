@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ReputationService } from './reputation.service';
 import { DomainsService } from '../domains/domains.service';
+import { MailService } from '../mail/mail.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 
@@ -19,6 +20,7 @@ export class ReputationController {
   constructor(
     private readonly reputationService: ReputationService,
     private readonly domainsService: DomainsService,
+    private readonly mailService: MailService,
   ) {}
 
   @Get()
@@ -34,9 +36,22 @@ export class ReputationController {
   @HttpCode(HttpStatus.CREATED)
   async runCheck(
     @Param('domainId', ParseUUIDPipe) domainId: string,
-    @CurrentUser() user: any,
+    @CurrentUser() user: { id: string; email: string; role: 'admin' | 'user'; tier: 'free' | 'plus' | 'pro' },
   ) {
     const domain = await this.domainsService.findOne(domainId, user); // access check
-    return this.reputationService.runCheck(domainId, domain.name);
+    const check = await this.reputationService.runCheck(domainId, domain.name);
+
+    // Send email report — fire and forget, never throw
+    void this.mailService.sendReputationReport(user.email, {
+      domainName: domain.name,
+      score: check.score,
+      emailScore: check.emailScore,
+      webScore: check.webScore,
+      status: check.status,
+      checkedAt: check.checkedAt,
+      details: check.details as Record<string, unknown>,
+    });
+
+    return check;
   }
 }

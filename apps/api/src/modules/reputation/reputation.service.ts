@@ -74,6 +74,9 @@ interface CheckDetails {
   domainExpiry?: { pass: boolean; daysUntilExpiry: number | null; expiresAt: string | null };
   dnssec?: { pass: boolean };
   wwwRedirect?: { pass: boolean; exists: boolean };
+  observatory?: { pass: boolean; grade: string | null; score: number | null };
+  safeBrowsing?: { pass: boolean; threats: string[] };
+  sslLabs?: { pass: boolean; grade: string | null; pending: boolean };
 }
 
 @Injectable()
@@ -136,6 +139,7 @@ export class ReputationService implements OnModuleInit {
       blacklists, mtaSts, tlsRpt, bimi,
       caa, nsCount, dbl, ptr,
       domainExpiry, dnssec, wwwRedirect,
+      observatory, safeBrowsing, sslLabs,
     ] = await Promise.all([
       this.checkMx(domain),
       this.checkSpf(domain),
@@ -154,6 +158,9 @@ export class ReputationService implements OnModuleInit {
       this.checkDomainExpiry(domain),
       this.checkDnssec(domain),
       this.checkWwwRedirect(domain),
+      this.checkMozillaObservatory(domain),
+      this.checkGoogleSafeBrowsing(domain),
+      this.checkSslLabs(domain),
     ]);
 
     return {
@@ -177,6 +184,9 @@ export class ReputationService implements OnModuleInit {
       domainExpiry,
       dnssec,
       wwwRedirect,
+      observatory,
+      safeBrowsing,
+      sslLabs,
     };
   }
 
@@ -592,6 +602,178 @@ export class ReputationService implements OnModuleInit {
     });
   }
 
+  // ── External security assessments ────────────────────────────────────────────
+
+  private httpsGetJson(hostname: string, path: string): Promise<{ status: number; json: unknown }> {
+    return new Promise((resolve, reject) => {
+      const req = https.get(
+        { hostname, path, timeout: 8000, headers: { 'User-Agent': 'SureSend-Monitor/1.0', Accept: 'application/json' } },
+        (res) => {
+          let body = '';
+          res.on('data', (c: Buffer) => { body += c.toString(); });
+          res.on('end', () => {
+            try { resolve({ status: res.statusCode ?? 0, json: JSON.parse(body) }); }
+            catch { resolve({ status: res.statusCode ?? 0, json: {} }); }
+          });
+        },
+      );
+      req.on('error', reject);
+      req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+    });
+  }
+
+  private httpsPostJson(hostname: string, path: string, body: string): Promise<{ status: number; json: unknown }> {
+    return new Promise((resolve, reject) => {
+      const buf = Buffer.from(body, 'utf8');
+      const req = https.request(
+        { method: 'POST', hostname, path, timeout: 8000, headers: { 'Content-Type': 'application/json', 'Content-Length': buf.length, 'User-Agent': 'SureSend-Monitor/1.0' } },
+        (res) => {
+          let resp = '';
+          res.on('data', (c: Buffer) => { resp += c.toString(); });
+          res.on('end', () => {
+            try { resolve({ status: res.statusCode ?? 0, json: JSON.parse(resp) }); }
+            catch { resolve({ status: res.statusCode ?? 0, json: {} }); }
+          });
+        },
+      );
+      req.on('error', reject);
+      req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+      req.write(buf);
+      req.end();
+    });
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((r) => setTimeout(r, ms));
+  }
+
+  /**
+   * Mozilla Observatory — grades HTTP security header configuration.
+   * Uses the v1 API. Grade A/A+ = pass.
+   */
+  private async checkMozillaObservatory(
+    domain: string,
+  ): Promise<{ pass: boolean; grade: string | null; score: number | null }> {
+    const fail = { pass: false, grade: null as string | null, score: null as number | null };
+    try {
+      // Trigger scan (POST, params in query string)
+      const post = await this.httpsPostJson(
+        'http-observatory.security.mozilla.org',
+        `/api/v1/analyze?host=${encodeURIComponent(domain)}&hidden=true&rescan=true`,
+        '',
+      );
+      const initial = post.json as Record<string, unknown>;
+      if (initial.state === 'FINISHED') {
+        const grade = (initial.grade as string | null) ?? null;
+        return { pass: (grade ?? '').startsWith('A'), grade, score: (initial.score as number | null) ?? null };
+      }
+      // Poll up to 3 times, 4 s apart
+      for (let i = 0; i < 3; i++) {
+        await this.sleep(4000);
+        const poll = await this.httpsGetJson(
+          'http-observatory.security.mozilla.org',
+          `/api/v1/analyze?host=${encodeURIComponent(domain)}`,
+        );
+        const r = poll.json as Record<string, unknown>;
+        if (r.state === 'FINISHED') {
+          const grade = (r.grade as string | null) ?? null;
+          return { pass: (grade ?? '').startsWith('A'), grade, score: (r.score as number | null) ?? null };
+        }
+      }
+      return fail;
+    } catch {
+      return fail;
+    }
+  }
+
+  /**
+   * Google Safe Browsing v4 — checks for malware / phishing.
+   * Skipped (returns pass) when GOOGLE_SAFE_BROWSING_API_KEY is not set.
+   */
+  private async checkGoogleSafeBrowsing(
+    domain: string,
+  ): Promise<{ pass: boolean; threats: string[] }> {
+    const apiKey = process.env.GOOGLE_SAFE_BROWSING_API_KEY;
+    if (!apiKey) return { pass: true, threats: [] };
+    try {
+      const body = JSON.stringify({
+        client: { clientId: 'suresend-monitor', clientVersion: '1.0' },
+        threatInfo: {
+          threatTypes: ['MALWARE', 'SOCIAL_ENGINEERING', 'UNWANTED_SOFTWARE', 'POTENTIALLY_HARMFUL_APPLICATION'],
+          platformTypes: ['ANY_PLATFORM'],
+          threatEntryTypes: ['URL'],
+          threatEntries: [{ url: `https://${domain}/` }],
+        },
+      });
+      const res = await this.httpsPostJson(
+        'safebrowsing.googleapis.com',
+        `/v4/threatMatches:find?key=${encodeURIComponent(apiKey)}`,
+        body,
+      );
+      if (res.status !== 200) return { pass: true, threats: [] };
+      const data = res.json as { matches?: { threatType: string }[] };
+      const threats = (data.matches ?? []).map((m) => m.threatType);
+      return { pass: threats.length === 0, threats };
+    } catch {
+      return { pass: true, threats: [] }; // fail open — don't penalise on API error
+    }
+  }
+
+  /**
+   * Qualys SSL Labs v3 — deep SSL/TLS grading.
+   * Tries the cache first; initiates a fresh scan and polls up to 15 s if not cached.
+   * Returns pending=true if the scan isn't complete within the timeout.
+   */
+  private async checkSslLabs(
+    domain: string,
+  ): Promise<{ pass: boolean; grade: string | null; pending: boolean }> {
+    const fail = { pass: false, grade: null as string | null, pending: false };
+
+    const extractGrade = (data: Record<string, unknown>): string | null =>
+      ((data.endpoints as { grade?: string }[] | undefined)?.[0]?.grade) ?? null;
+
+    try {
+      // 1. Try cache
+      const cached = await this.httpsGetJson(
+        'api.ssllabs.com',
+        `/api/v3/analyze?host=${encodeURIComponent(domain)}&fromCache=on&maxAge=24&all=done`,
+      );
+      const cachedData = cached.json as Record<string, unknown>;
+      if (cachedData.status === 'READY') {
+        const grade = extractGrade(cachedData);
+        if (grade) return { pass: !grade.startsWith('F') && grade !== 'T', grade, pending: false };
+      }
+
+      // 2. Not cached — initiate new scan
+      const start = await this.httpsGetJson(
+        'api.ssllabs.com',
+        `/api/v3/analyze?host=${encodeURIComponent(domain)}&startNew=on&all=done`,
+      );
+      const startData = start.json as Record<string, unknown>;
+      if (startData.status === 'READY') {
+        const grade = extractGrade(startData);
+        if (grade) return { pass: !grade.startsWith('F') && grade !== 'T', grade, pending: false };
+      }
+
+      // 3. Poll up to 3 × 5 s = 15 s
+      for (let i = 0; i < 3; i++) {
+        await this.sleep(5000);
+        const poll = await this.httpsGetJson(
+          'api.ssllabs.com',
+          `/api/v3/analyze?host=${encodeURIComponent(domain)}&all=done`,
+        );
+        const pollData = poll.json as Record<string, unknown>;
+        if (pollData.status === 'READY') {
+          const grade = extractGrade(pollData);
+          if (grade) return { pass: !grade.startsWith('F') && grade !== 'T', grade, pending: false };
+        }
+      }
+      return { pass: false, grade: null, pending: true };
+    } catch {
+      return fail;
+    }
+  }
+
   // ── Scoring ──────────────────────────────────────────────────────────────────
 
   /**
@@ -679,6 +861,15 @@ export class ReputationService implements OnModuleInit {
     if (details.nsCount && !details.nsCount.pass) score -= 8;
     if (details.caa && !details.caa.pass) score -= 5;
     if (details.dnssec && !details.dnssec.pass) score -= 8;
+
+    // External assessments
+    if (details.safeBrowsing && !details.safeBrowsing.pass) score -= 25;
+    if (details.observatory?.grade) {
+      const g = details.observatory.grade;
+      if (g.startsWith('F')) score -= 10;
+      else if (g.startsWith('D')) score -= 5;
+      else if (g.startsWith('C')) score -= 3;
+    }
 
     if (details.domainExpiry?.daysUntilExpiry !== null && details.domainExpiry?.daysUntilExpiry !== undefined) {
       const days = details.domainExpiry.daysUntilExpiry;

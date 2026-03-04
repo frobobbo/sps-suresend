@@ -78,7 +78,7 @@ export function Nav() {
           Sign out
         </Button>
         <div className="text-right px-1 mt-2 text-[10px]" style={{ color: 'oklch(0.38 0.02 228)' }}>
-          v1.3.2
+          v1.3.3
         </div>
       </div>
     </aside>
