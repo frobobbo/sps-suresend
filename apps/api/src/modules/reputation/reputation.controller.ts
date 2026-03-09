@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   HttpCode,
@@ -11,8 +12,8 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { ReputationService } from './reputation.service';
+import { ScanQueueService } from './scan-queue.service';
 import { DomainsService } from '../domains/domains.service';
-import { MailService } from '../mail/mail.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { AuditService } from '../audit/audit.service';
@@ -24,8 +25,8 @@ import { RateLimitGuard } from '../security/rate-limit.guard';
 export class ReputationController {
   constructor(
     private readonly reputationService: ReputationService,
+    private readonly scanQueueService: ScanQueueService,
     private readonly domainsService: DomainsService,
-    private readonly mailService: MailService,
     private readonly auditService: AuditService,
   ) {}
 
@@ -49,7 +50,10 @@ export class ReputationController {
   ) {
     try {
       const domain = await this.domainsService.findOne(domainId, user); // access check
-      const check = await this.reputationService.runCheck(domainId, domain.name);
+      if (!domain.verifiedAt) {
+        throw new BadRequestException('Verify this domain before running scans');
+      }
+      const job = await this.scanQueueService.enqueueManual(domainId, user.id);
 
       await this.auditService.record({
         action: 'reputation.check',
@@ -59,21 +63,9 @@ export class ReputationController {
         resourceId: domainId,
         status: 'success',
         ip: req.ip,
-        metadata: { score: check.score, statusLabel: check.status },
+        metadata: { queuedJobId: job.id },
       });
-
-      // Send email report — fire and forget, never throw
-      void this.mailService.sendReputationReport(user.email, {
-        domainName: domain.name,
-        score: check.score,
-        emailScore: check.emailScore,
-        webScore: check.webScore,
-        status: check.status,
-        checkedAt: check.checkedAt,
-        details: check.details as Record<string, unknown>,
-      });
-
-      return check;
+      return job;
     } catch (error) {
       await this.auditService.record({
         action: 'reputation.check',
@@ -87,5 +79,14 @@ export class ReputationController {
       });
       throw error;
     }
+  }
+
+  @Get('jobs/latest')
+  async latestJob(
+    @Param('domainId', ParseUUIDPipe) domainId: string,
+    @CurrentUser() user: any,
+  ) {
+    await this.domainsService.findOne(domainId, user);
+    return this.scanQueueService.latestForDomain(domainId);
   }
 }

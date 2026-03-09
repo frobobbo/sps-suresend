@@ -36,6 +36,21 @@ export class Domain {
   @Column({ nullable: true, type: 'text', select: false })
   cloudflareToken!: string | null;
 
+  @Column({ type: 'varchar', length: 64 })
+  verificationToken!: string;
+
+  @Column({ type: 'timestamp', nullable: true })
+  verifiedAt!: Date | null;
+
+  @Column({ type: 'int', nullable: true, default: 1440 })
+  scanIntervalMinutes!: number | null;
+
+  @Column({ type: 'boolean', default: true })
+  alertsEnabled!: boolean;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastScheduledScanAt!: Date | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

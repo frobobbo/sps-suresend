@@ -6,6 +6,7 @@ import { User } from '../modules/users/user.entity';
 import { Domain } from '../modules/domains/domain.entity';
 import { DomainAccess } from '../modules/domains/domain-access.entity';
 import { ReputationCheck } from '../modules/reputation/reputation-check.entity';
+import { ScanJob } from '../modules/reputation/scan-job.entity';
 import { AppSetting } from '../modules/settings/app-setting.entity';
 import { AuditLog } from '../modules/audit/audit-log.entity';
 
@@ -16,7 +17,7 @@ import { AuditLog } from '../modules/audit/audit-log.entity';
       useFactory: (config: ConfigService) => ({
         type: 'postgres',
         url: config.get<string>('DATABASE_URL'),
-        entities: [User, Domain, DomainAccess, ReputationCheck, AppSetting, AuditLog],
+        entities: [User, Domain, DomainAccess, ReputationCheck, ScanJob, AppSetting, AuditLog],
         migrations: [join(__dirname, 'migrations/*.{ts,js}')],
         migrationsRun: true,
         synchronize: false,

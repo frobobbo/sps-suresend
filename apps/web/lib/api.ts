@@ -119,6 +119,23 @@ export const domains = {
   disconnectCloudflare: (domainId: string) =>
     apiFetch<void>(`/domains/${domainId}/cloudflare`, { method: 'DELETE' }),
 
+  verification: (domainId: string) =>
+    apiFetch<{ host: string; value: string; verifiedAt: string | null }>(`/domains/${domainId}/verification`),
+
+  verify: (domainId: string) =>
+    apiFetch<{ verified: boolean; verifiedAt: string | null }>(`/domains/${domainId}/verify`, {
+      method: 'POST',
+    }),
+
+  updateMonitoring: (
+    domainId: string,
+    body: { scanIntervalMinutes: number | null; alertsEnabled: boolean },
+  ) =>
+    apiFetch<{ scanIntervalMinutes: number | null; alertsEnabled: boolean }>(`/domains/${domainId}/monitoring`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
   fixCheck: (domainId: string, check: string, payload?: unknown) =>
     apiFetch<{ record: string; action: string }>(`/domains/${domainId}/fix/${check}`, {
       method: 'POST',
@@ -153,9 +170,12 @@ export const reputation = {
     apiFetch<ReputationCheck[]>(`/domains/${domainId}/reputation`),
 
   runCheck: (domainId: string) =>
-    apiFetch<ReputationCheck>(`/domains/${domainId}/reputation/check`, {
+    apiFetch<ScanJob>(`/domains/${domainId}/reputation/check`, {
       method: 'POST',
     }),
+
+  latestJob: (domainId: string) =>
+    apiFetch<ScanJob | null>(`/domains/${domainId}/reputation/jobs/latest`),
 };
 
 // ─── Types (mirrored from shared for client use) ──────────────────────────────
@@ -181,7 +201,27 @@ export interface Domain {
   ownerId: string;
   delegatedAccess: DomainAccess[];
   cloudflareConnected?: boolean;
+  verificationToken?: string;
+  verifiedAt: string | null;
+  scanIntervalMinutes: number | null;
+  alertsEnabled: boolean;
+  lastScheduledScanAt: string | null;
   createdAt: string;
+}
+
+export interface ScanJob {
+  id: string;
+  domainId: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  trigger: 'manual' | 'scheduled';
+  requestedByUserId: string | null;
+  runAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  resultCheckId: string | null;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ReputationCheck {

@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { DomainsService } from './domains.service';
-import { CreateDomainDto, DelegateAccessDto, SetCloudflareTokenDto } from './domains.dto';
+import { CreateDomainDto, DelegateAccessDto, SetCloudflareTokenDto, UpdateMonitoringDto } from './domains.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { Domain } from './domain.entity';
@@ -59,6 +59,25 @@ export class DomainsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
     return this.domainsService.remove(id, user);
+  }
+
+  @Get(':id/verification')
+  verification(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
+    return this.domainsService.getVerificationDetails(id, user);
+  }
+
+  @Post(':id/verify')
+  verify(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
+    return this.domainsService.verifyOwnership(id, user);
+  }
+
+  @Put(':id/monitoring')
+  updateMonitoring(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateMonitoringDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.domainsService.updateMonitoringSettings(id, dto, user);
   }
 
   @Post(':id/access')

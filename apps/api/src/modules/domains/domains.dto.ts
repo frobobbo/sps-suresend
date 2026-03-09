@@ -1,10 +1,13 @@
 import {
   IsEmail,
+  IsBoolean,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
   MinLength,
+  Min,
   ValidateIf,
 } from 'class-validator';
 
@@ -31,4 +34,15 @@ export class DelegateAccessDto {
   @IsEmail()
   @IsOptional()
   email?: string;
+}
+
+export class UpdateMonitoringDto {
+  @IsOptional()
+  @IsInt()
+  @Min(15)
+  scanIntervalMinutes?: number | null;
+
+  @IsOptional()
+  @IsBoolean()
+  alertsEnabled?: boolean;
 }

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
-import { domains as domainsApi, reputation as repApi, type Domain, type ReputationCheck } from '@/lib/api';
+import { domains as domainsApi, reputation as repApi, type Domain, type ReputationCheck, type ScanJob } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -747,7 +747,10 @@ export default function DomainDetailPage() {
   const router = useRouter();
   const [domain, setDomain] = useState<Domain | null>(null);
   const [checks, setChecks] = useState<ReputationCheck[]>([]);
+  const [latestJob, setLatestJob] = useState<ScanJob | null>(null);
+  const [verification, setVerification] = useState<{ host: string; value: string; verifiedAt: string | null } | null>(null);
   const [running, setRunning] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
   const [fixing, setFixing] = useState<string | null>(null);
   const [fixResult, setFixResult] = useState<{ record: string; action: string } | null>(null);
   const [fixError, setFixError] = useState<string | null>(null);
@@ -755,6 +758,10 @@ export default function DomainDetailPage() {
   const [cfToken, setCfToken] = useState('');
   const [cfSaving, setCfSaving] = useState(false);
   const [cfError, setCfError] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [savingMonitoring, setSavingMonitoring] = useState(false);
+  const [monitoringError, setMonitoringError] = useState<string | null>(null);
   const [spfDialogOpen, setSpfDialogOpen] = useState(false);
   const [dmarcDialogOpen, setDmarcDialogOpen] = useState(false);
   const [dkimDialogOpen, setDkimDialogOpen] = useState(false);
@@ -768,16 +775,80 @@ export default function DomainDetailPage() {
   useEffect(() => {
     if (!user) return;
     domainsApi.get(id).then(setDomain);
+    domainsApi.verification(id).then(setVerification);
     repApi.list(id).then(setChecks);
+    repApi.latestJob(id).then(setLatestJob);
   }, [user, id]);
 
+  useEffect(() => {
+    if (!latestJob || latestJob.status === 'completed' || latestJob.status === 'failed') return;
+    const timer = window.setInterval(async () => {
+      const next = await repApi.latestJob(id);
+      setLatestJob(next);
+      if (next?.status === 'completed') {
+        setChecks(await repApi.list(id));
+        setRunning(false);
+        window.clearInterval(timer);
+      } else if (next?.status === 'failed') {
+        setRunError(next.error ?? 'Scan failed');
+        setRunning(false);
+        window.clearInterval(timer);
+      }
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [latestJob, id]);
+
   async function handleRunCheck() {
+    setRunError(null);
     setRunning(true);
     try {
       const result = await repApi.runCheck(id);
-      setChecks((prev) => [result, ...prev]);
-    } finally {
+      setLatestJob(result);
+      if (result.status === 'completed') {
+        setChecks(await repApi.list(id));
+        setRunning(false);
+      } else if (result.status === 'failed') {
+        setRunError(result.error ?? 'Scan failed');
+        setRunning(false);
+      }
+    } catch (err: any) {
+      setRunError(err.message ?? 'Unable to queue scan');
       setRunning(false);
+    }
+  }
+
+  async function handleVerifyDomain() {
+    setVerifying(true);
+    setVerificationError(null);
+    try {
+      const result = await domainsApi.verify(id);
+      setDomain(await domainsApi.get(id));
+      setVerification(await domainsApi.verification(id));
+      if (!result.verified) {
+        setVerificationError('Verification record not found yet. DNS may still be propagating.');
+      }
+    } catch (err: any) {
+      setVerificationError(err.message ?? 'Verification failed');
+    } finally {
+      setVerifying(false);
+    }
+  }
+
+  async function handleSaveMonitoring(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setMonitoringError(null);
+    const form = new FormData(e.currentTarget);
+    const intervalRaw = String(form.get('scanIntervalMinutes') ?? 'off');
+    const alertsEnabled = form.get('alertsEnabled') === 'on';
+    const scanIntervalMinutes = intervalRaw === 'off' ? null : Number(intervalRaw);
+    setSavingMonitoring(true);
+    try {
+      const settings = await domainsApi.updateMonitoring(id, { scanIntervalMinutes, alertsEnabled });
+      setDomain((prev) => prev ? { ...prev, ...settings } : prev);
+    } catch (err: any) {
+      setMonitoringError(err.message ?? 'Unable to save monitoring settings');
+    } finally {
+      setSavingMonitoring(false);
     }
   }
 
@@ -788,8 +859,9 @@ export default function DomainDetailPage() {
     try {
       const result = await domainsApi.fixCheck(id, check, payload);
       setFixResult(result);
-      const fresh = await repApi.runCheck(id);
-      setChecks((prev) => [fresh, ...prev]);
+      const job = await repApi.runCheck(id);
+      setLatestJob(job);
+      setRunning(job.status === 'queued' || job.status === 'running');
     } catch (err: any) {
       setFixError(err.message ?? 'Fix failed');
       throw err;
@@ -826,6 +898,16 @@ export default function DomainDetailPage() {
 
   const latest = checks[0];
   const d = latest?.details;
+  const activeJob = latestJob && (latestJob.status === 'queued' || latestJob.status === 'running')
+    ? latestJob
+    : null;
+  const runButtonLabel = !domain.verifiedAt
+    ? 'Verify Domain First'
+    : activeJob?.status === 'running'
+      ? 'Scan Running'
+      : activeJob?.status === 'queued'
+        ? 'Scan Queued'
+        : 'Run Check';
   // Free-tier users always see fix buttons (clicking opens upgrade dialog).
   // Plus/Pro users who manage the domain and have CF connected get the actual fix.
   const handleFixIntent = async (check: string) => {
@@ -849,7 +931,12 @@ export default function DomainDetailPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--sp-navy)]">{domain.name}</h1>
-          <p className="text-sm text-slate-500 mt-1">{domain.delegatedAccess?.length ?? 0} delegated users</p>
+          <div className="mt-1 flex items-center gap-2 text-sm text-slate-500">
+            <span>{domain.delegatedAccess?.length ?? 0} delegated users</span>
+            <Badge className={domain.verifiedAt ? 'bg-emerald-100 text-emerald-700 border-0' : 'bg-amber-100 text-amber-700 border-0'}>
+              {domain.verifiedAt ? 'Verified' : 'Verification required'}
+            </Badge>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {canManage && (
@@ -895,9 +982,9 @@ export default function DomainDetailPage() {
               </Dialog>
             )
           )}
-          <Button onClick={handleRunCheck} disabled={running}>
-            {running ? <Loader2 size={16} className="mr-2 animate-spin" /> : <RefreshCw size={16} className="mr-2" />}
-            Run Check
+          <Button onClick={handleRunCheck} disabled={running || !!activeJob || !domain.verifiedAt}>
+            {(running || activeJob) ? <Loader2 size={16} className="mr-2 animate-spin" /> : <RefreshCw size={16} className="mr-2" />}
+            {runButtonLabel}
           </Button>
         </div>
       </div>
@@ -912,6 +999,136 @@ export default function DomainDetailPage() {
         </Alert>
       )}
       {fixError && <Alert variant="destructive"><AlertDescription>{fixError}</AlertDescription></Alert>}
+      {runError && <Alert variant="destructive"><AlertDescription>{runError}</AlertDescription></Alert>}
+      {activeJob && (
+        <Alert className="border-sky-200 bg-sky-50 text-sky-900">
+          <AlertDescription className="flex items-center gap-2">
+            <Loader2 size={14} className="animate-spin shrink-0" />
+            {activeJob.trigger === 'scheduled' ? 'Scheduled scan' : 'Scan'} {activeJob.status === 'queued' ? 'queued' : 'running'} for {domain.name}.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center justify-between">
+              Domain Verification
+              <Badge className={domain.verifiedAt ? 'bg-emerald-100 text-emerald-700 border-0' : 'bg-amber-100 text-amber-700 border-0'}>
+                {domain.verifiedAt ? 'Verified' : 'Pending'}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-slate-600">
+              Publish this TXT record to prove you control the domain. Scheduled scans, alerts, and manual checks stay disabled until verification succeeds.
+            </p>
+            {verification && (
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-3 space-y-2">
+                <div>
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">TXT host</p>
+                  <p className="text-xs font-mono text-slate-700 break-all">{verification.host}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">TXT value</p>
+                  <p className="text-xs font-mono text-slate-700 break-all">{verification.value}</p>
+                </div>
+              </div>
+            )}
+            <div className="text-xs text-slate-500 space-y-1">
+              <p>1. Add the TXT record in your DNS provider.</p>
+              <p>2. Wait for DNS propagation.</p>
+              <p>3. Click verify below.</p>
+            </div>
+            {domain.verifiedAt && (
+              <p className="text-xs text-emerald-700">
+                Verified on {new Date(domain.verifiedAt).toLocaleString()}.
+              </p>
+            )}
+            {verificationError && <Alert variant="destructive"><AlertDescription>{verificationError}</AlertDescription></Alert>}
+            {canManage && (
+              <Button onClick={handleVerifyDomain} disabled={verifying} className="w-full">
+                {verifying && <Loader2 size={14} className="mr-2 animate-spin" />}
+                {domain.verifiedAt ? 'Re-check Verification' : 'Verify Domain'}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Scheduled Monitoring</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-slate-600">
+              SureSend can queue recurring scans in the background and email the domain owner when the status changes or a verified domain first scans unhealthy.
+            </p>
+            {canManage ? (
+              <form onSubmit={handleSaveMonitoring} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="scanIntervalMinutes">Scan frequency</Label>
+                  <select
+                    id="scanIntervalMinutes"
+                    name="scanIntervalMinutes"
+                    defaultValue={domain.scanIntervalMinutes === null ? 'off' : String(domain.scanIntervalMinutes)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    disabled={!domain.verifiedAt || savingMonitoring}
+                  >
+                    <option value="off">Off</option>
+                    <option value="15">Every 15 minutes</option>
+                    <option value="60">Hourly</option>
+                    <option value="360">Every 6 hours</option>
+                    <option value="1440">Daily</option>
+                  </select>
+                </div>
+                <label className="flex items-start gap-3 rounded-md border border-slate-200 p-3">
+                  <input
+                    type="checkbox"
+                    name="alertsEnabled"
+                    defaultChecked={domain.alertsEnabled}
+                    disabled={!domain.verifiedAt || savingMonitoring}
+                    className="mt-1"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">Email alerts on status changes</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Sends the reputation report to the domain owner when a scheduled scan changes from clean to warning/critical, recovers, or the first scheduled result is unhealthy.
+                    </p>
+                  </div>
+                </label>
+                {!domain.verifiedAt && (
+                  <Alert>
+                    <AlertDescription>Verify the domain before enabling background monitoring.</AlertDescription>
+                  </Alert>
+                )}
+                {monitoringError && <Alert variant="destructive"><AlertDescription>{monitoringError}</AlertDescription></Alert>}
+                <Button type="submit" disabled={savingMonitoring || !domain.verifiedAt}>
+                  {savingMonitoring && <Loader2 size={14} className="mr-2 animate-spin" />}
+                  Save Monitoring Settings
+                </Button>
+              </form>
+            ) : (
+              <div className="space-y-2 text-sm text-slate-600">
+                <p>
+                  Frequency: {domain.scanIntervalMinutes ? (
+                    domain.scanIntervalMinutes === 15 ? 'Every 15 minutes'
+                    : domain.scanIntervalMinutes === 60 ? 'Hourly'
+                    : domain.scanIntervalMinutes === 360 ? 'Every 6 hours'
+                    : domain.scanIntervalMinutes === 1440 ? 'Daily'
+                    : `Every ${domain.scanIntervalMinutes} minutes`
+                  ) : 'Off'}
+                </p>
+                <p>Alerts: {domain.alertsEnabled ? 'Enabled' : 'Disabled'}</p>
+              </div>
+            )}
+            {domain.lastScheduledScanAt && (
+              <p className="text-xs text-slate-500">
+                Last scheduled scan queued on {new Date(domain.lastScheduledScanAt).toLocaleString()}.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Prompt to connect Cloudflare when there are fixable failures */}
       {!domain.cloudflareConnected && canManage && d && (

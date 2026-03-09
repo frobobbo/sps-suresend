@@ -67,7 +67,13 @@
       "Bash(pnpm typecheck)",
       "Bash(pnpm remove nodemailer)",
       "Bash(pnpm remove -D @types/nodemailer)",
-      "Bash(pnpm add mailgun.js form-data)"
+      "Bash(pnpm add mailgun.js form-data)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X POST \"https://observatory-api.mdn.mozilla.net/api/v2/scan?host=example.com\" -H \"User-Agent: SureSend-Monitor/1.0\")",
+      "Bash(curl -s \"https://api.ssllabs.com/api/v4/analyze?host=example.com&fromCache=on&maxAge=24&all=done\" -H \"User-Agent: SureSend-Monitor/1.0\")",
+      "Bash(curl -s -X POST \"https://observatory-api.mdn.mozilla.net/api/v2/scan?host=example.com\" -H \"User-Agent: SureSend-Monitor/1.0\")",
+      "Bash(curl -s -X POST \"https://observatory-api.mdn.mozilla.net/api/v2/scan?host=example.com\" -H \"User-Agent: SureSend-Monitor/1.0\" -H \"Content-Type: application/json\" -H \"Content-Length: 0\")",
+      "Bash(npx tsc --noEmit -p apps/api/tsconfig.json)",
+      "Bash(curl -s \"https://api.ssllabs.com/api/v4/analyze?host=strategyplussolutions.com&fromCache=on&maxAge=24&all=done\" -H \"email: monitor@suresend.io\" -H \"User-Agent: SureSend-Monitor/1.0\")"
     ],
     "additionalDirectories": [
       "/home/brett/Documents/projects/sps-suresend/apps/api/src",

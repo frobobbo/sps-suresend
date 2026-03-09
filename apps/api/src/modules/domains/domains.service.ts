@@ -7,10 +7,12 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { randomBytes } from 'crypto';
+import { promises as dnsPromises } from 'dns';
 import { Domain } from './domain.entity';
 import { DomainAccess } from './domain-access.entity';
 import { CloudflareService } from './cloudflare.service';
-import { CreateDomainDto, DelegateAccessDto } from './domains.dto';
+import { CreateDomainDto, DelegateAccessDto, UpdateMonitoringDto } from './domains.dto';
 import { UsersService } from '../users/users.service';
 import { SecretCipherService } from '../security/secret-cipher.service';
 
@@ -64,9 +66,18 @@ export class DomainsService {
   }
 
   async create(dto: CreateDomainDto, user: RequestUser): Promise<Domain> {
-    const existing = await this.domainRepo.findOneBy({ name: dto.name });
+    const normalizedName = dto.name.toLowerCase().trim();
+    const existing = await this.domainRepo.findOneBy({ name: normalizedName });
     if (existing) throw new ConflictException('Domain already registered');
-    const domain = this.domainRepo.create({ name: dto.name, ownerId: user.id });
+    const domain = this.domainRepo.create({
+      name: normalizedName,
+      ownerId: user.id,
+      verificationToken: randomBytes(16).toString('hex'),
+      verifiedAt: null,
+      scanIntervalMinutes: 1440,
+      alertsEnabled: true,
+      lastScheduledScanAt: null,
+    });
     return this.domainRepo.save(domain);
   }
 
@@ -176,6 +187,72 @@ export class DomainsService {
     );
   }
 
+  async getVerificationDetails(id: string, user: RequestUser): Promise<{
+    host: string;
+    value: string;
+    verifiedAt: Date | null;
+  }> {
+    const domain = await this.findOne(id, user);
+    return {
+      host: `_suresend-verification.${domain.name}`,
+      value: domain.verificationToken,
+      verifiedAt: domain.verifiedAt,
+    };
+  }
+
+  async verifyOwnership(id: string, user: RequestUser): Promise<{ verified: boolean; verifiedAt: Date | null }> {
+    const domain = await this.findOne(id, user);
+    if (user.role !== 'admin' && domain.ownerId !== user.id) {
+      throw new ForbiddenException('Only the owner or an admin can verify this domain');
+    }
+    if (domain.verifiedAt) {
+      return { verified: true, verifiedAt: domain.verifiedAt };
+    }
+
+    const host = `_suresend-verification.${domain.name}`;
+    try {
+      const records = await dnsPromises.resolveTxt(host);
+      const flat = records.map((r) => r.join(''));
+      const found = flat.includes(domain.verificationToken);
+      if (!found) return { verified: false, verifiedAt: null };
+    } catch {
+      return { verified: false, verifiedAt: null };
+    }
+
+    const verifiedAt = new Date();
+    await this.domainRepo.update({ id: domain.id }, { verifiedAt });
+    return { verified: true, verifiedAt };
+  }
+
+  async updateMonitoringSettings(
+    id: string,
+    dto: UpdateMonitoringDto,
+    user: RequestUser,
+  ): Promise<Pick<Domain, 'scanIntervalMinutes' | 'alertsEnabled'>> {
+    const domain = await this.findOne(id, user);
+    if (user.role !== 'admin' && domain.ownerId !== user.id) {
+      throw new ForbiddenException('Only the owner or an admin can update monitoring settings');
+    }
+
+    await this.domainRepo.update(
+      { id: domain.id },
+      {
+        scanIntervalMinutes: dto.scanIntervalMinutes ?? null,
+        alertsEnabled: dto.alertsEnabled ?? domain.alertsEnabled,
+      },
+    );
+
+    const updated = await this.domainRepo.findOneByOrFail({ id: domain.id });
+    return {
+      scanIntervalMinutes: updated.scanIntervalMinutes,
+      alertsEnabled: updated.alertsEnabled,
+    };
+  }
+
+  async markScheduledScanQueued(id: string, at: Date): Promise<void> {
+    await this.domainRepo.update({ id }, { lastScheduledScanAt: at });
+  }
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   /** Whether a domain has a Cloudflare token set (without loading the token itself). */
@@ -214,5 +291,18 @@ export class DomainsService {
     const targetUser = await this.usersService.findByEmail(dto.email);
     if (!targetUser) throw new NotFoundException('User not found');
     return targetUser.id;
+  }
+
+  async findVerifiedDomainsDue(now: Date): Promise<Domain[]> {
+    const domains = await this.domainRepo.find({
+      where: {},
+      relations: ['owner'],
+    });
+    return domains.filter((domain) => {
+      if (!domain.verifiedAt) return false;
+      if (!domain.scanIntervalMinutes) return false;
+      const last = domain.lastScheduledScanAt?.getTime() ?? 0;
+      return !last || now.getTime() - last >= domain.scanIntervalMinutes * 60 * 1000;
+    });
   }
 }

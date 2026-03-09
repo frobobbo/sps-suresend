@@ -63,3 +63,12 @@ Web image tag — falls back to .Chart.AppVersion.
 {{- $tag := .Values.web.image.tag | default .Chart.AppVersion }}
 {{- printf "%s:%s" .Values.web.image.repository $tag }}
 {{- end }}
+
+{{/*
+Worker image tag — falls back to API image settings and .Chart.AppVersion.
+*/}}
+{{- define "suresend.worker.image" -}}
+{{- $repository := .Values.worker.image.repository | default .Values.api.image.repository }}
+{{- $tag := .Values.worker.image.tag | default .Values.api.image.tag | default .Chart.AppVersion }}
+{{- printf "%s:%s" $repository $tag }}
+{{- end }}
