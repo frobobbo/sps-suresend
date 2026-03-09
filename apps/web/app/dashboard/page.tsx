@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { domains as domainsApi, reputation as repApi, type Domain, type ReputationCheck } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Globe, ShieldCheck, ShieldAlert, ShieldX } from 'lucide-react';
 
 function statusColor(status: string) {
@@ -42,6 +43,7 @@ export default function DashboardPage() {
   if (isLoading || !user) return null;
 
   const repValues = Object.values(latestRep);
+  const unverifiedCount = domainList.filter((d) => !d.verifiedAt).length;
   const counts = {
     clean: repValues.filter((c) => c?.status === 'clean').length,
     warning: repValues.filter((c) => c?.status === 'warning').length,
@@ -52,6 +54,14 @@ export default function DashboardPage() {
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-[var(--sp-navy)]">Dashboard</h1>
+
+      {unverifiedCount > 0 && (
+        <Alert className="border-amber-200 bg-amber-50 text-amber-900">
+          <AlertDescription>
+            {unverifiedCount} {unverifiedCount === 1 ? 'domain is' : 'domains are'} waiting for ownership verification. Scans are blocked until you publish the TXT record shown on each domain page.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
@@ -90,19 +100,29 @@ export default function DashboardPage() {
             <ul className="divide-y divide-slate-100">
               {domainList.map((d) => (
                 <li key={d.id} className="flex items-center justify-between py-3">
-                  <Link
-                    href={`/domains/${d.id}`}
-                    className="font-medium text-[var(--sp-blue)] hover:underline"
-                  >
-                    {d.name}
-                  </Link>
-                  {latestRep[d.id] ? (
-                    <Badge className={`border-0 ${statusColor(latestRep[d.id]!.status)}`}>
-                      {latestRep[d.id]!.status}
+                  <div>
+                    <Link
+                      href={`/domains/${d.id}`}
+                      className="font-medium text-[var(--sp-blue)] hover:underline"
+                    >
+                      {d.name}
+                    </Link>
+                    {!d.verifiedAt && (
+                      <p className="mt-1 text-xs text-amber-700">Verification required before scans can run.</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge className={d.verifiedAt ? 'bg-emerald-100 text-emerald-700 border-0' : 'bg-amber-100 text-amber-700 border-0'}>
+                      {d.verifiedAt ? 'Verified' : 'Verify'}
                     </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-slate-400">Unchecked</Badge>
-                  )}
+                    {latestRep[d.id] ? (
+                      <Badge className={`border-0 ${statusColor(latestRep[d.id]!.status)}`}>
+                        {latestRep[d.id]!.status}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-slate-400">Unchecked</Badge>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

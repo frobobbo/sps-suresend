@@ -30,6 +30,12 @@ function statusBadge(status?: string) {
   return <Badge className={cls}>{status}</Badge>;
 }
 
+function verificationBadge(verifiedAt: string | null) {
+  return verifiedAt
+    ? <Badge className="bg-emerald-100 text-emerald-700 border-0">Verified</Badge>
+    : <Badge className="bg-amber-100 text-amber-700 border-0">Verification required</Badge>;
+}
+
 export default function DomainsPage() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
@@ -64,9 +70,9 @@ export default function DomainsPage() {
     setSaving(true);
     try {
       const created = await domainsApi.create(newDomain.trim());
-      setDomainList((prev) => [created, ...prev]);
       setAddOpen(false);
       setNewDomain('');
+      router.push(`/domains/${created.id}`);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -103,6 +109,7 @@ export default function DomainsPage() {
   if (isLoading || !user) return null;
 
   const canManage = (d: Domain) => user.role === 'admin' || d.ownerId === user.id;
+  const unverifiedCount = domainList.filter((d) => !d.verifiedAt).length;
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -125,6 +132,11 @@ export default function DomainsPage() {
                 />
               </div>
               {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+              <Alert className="border-sky-200 bg-sky-50 text-sky-900">
+                <AlertDescription>
+                  After adding the domain, you will be taken to the verification screen to publish a TXT record before scans can run.
+                </AlertDescription>
+              </Alert>
               <Button type="submit" className="w-full" disabled={saving}>
                 {saving ? 'Adding…' : 'Add domain'}
               </Button>
@@ -133,11 +145,20 @@ export default function DomainsPage() {
         </Dialog>
       </div>
 
+      {unverifiedCount > 0 && (
+        <Alert className="border-amber-200 bg-amber-50 text-amber-900">
+          <AlertDescription>
+            {unverifiedCount} {unverifiedCount === 1 ? 'domain requires' : 'domains require'} ownership verification before scans and alerts can run. Open a domain and publish the TXT record shown in the verification section.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
         <Table>
           <TableHeader>
             <TableRow className="bg-slate-50">
               <TableHead>Domain</TableHead>
+              <TableHead>Ownership</TableHead>
               <TableHead>Reputation</TableHead>
               <TableHead>Delegated Access</TableHead>
               <TableHead>Added</TableHead>
@@ -152,6 +173,21 @@ export default function DomainsPage() {
                     <Link href={`/domains/${d.id}`} className="font-medium text-[var(--sp-blue)] hover:underline">
                       {d.name}
                     </Link>
+                    {!d.verifiedAt && (
+                      <p className="mt-1 text-xs text-amber-700">
+                        Publish the TXT record on the domain detail page to verify ownership.
+                      </p>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {verificationBadge(d.verifiedAt)}
+                      {!d.verifiedAt && (
+                        <Link href={`/domains/${d.id}`} className="text-xs text-sky-600 hover:underline">
+                          Verify now
+                        </Link>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>{statusBadge(latestRep[d.id]?.status)}</TableCell>
                   <TableCell>
