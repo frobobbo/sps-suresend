@@ -84,6 +84,7 @@ interface CheckDetails {
 
 @Injectable()
 export class ReputationService implements OnModuleInit {
+  private static readonly CHECK_TIMEOUT_MS = 8_000;
   private readonly logger = new Logger(ReputationService.name);
 
   private dnsClient: DnsClient = dnsPromises as unknown as DnsClient;
@@ -144,25 +145,37 @@ export class ReputationService implements OnModuleInit {
       domainExpiry, dnssec, wwwRedirect,
       observatory, safeBrowsing,
     ] = await Promise.all([
-      this.checkMx(domain),
-      this.checkSpf(domain),
-      this.checkDmarc(domain),
-      this.checkDkim(domain),
-      this.checkHttpsProperties(domain),
-      this.checkHttpRedirect(domain),
-      this.checkBlacklists(domain),
-      this.checkMtaSts(domain),
-      this.checkTlsRpt(domain),
-      this.checkBimi(domain),
-      this.checkCaa(domain),
-      this.checkNsCount(domain),
-      this.checkDbl(domain),
-      this.checkPtr(domain),
-      this.checkDomainExpiry(domain),
-      this.checkDnssec(domain),
-      this.checkWwwRedirect(domain),
-      this.checkMozillaObservatory(domain),
-      this.checkGoogleSafeBrowsing(domain),
+      this.withTimeout(this.checkMx(domain), { pass: false, records: [] }, 'mx'),
+      this.withTimeout(this.checkSpf(domain), { pass: false, record: null }, 'spf'),
+      this.withTimeout(this.checkDmarc(domain), { pass: false, record: null }, 'dmarc'),
+      this.withTimeout(this.checkDkim(domain), { pass: false, selector: null }, 'dkim'),
+      this.withTimeout(this.checkHttpsProperties(domain), {
+        https: { pass: false, statusCode: null },
+        ssl: { pass: false, daysUntilExpiry: null, expiresAt: null },
+        securityHeaders: {
+          hsts: false,
+          xContentTypeOptions: false,
+          xFrameOptions: false,
+          csp: false,
+          referrerPolicy: false,
+          permissionsPolicy: false,
+        },
+        tlsVersion: { protocol: null, pass: false },
+      }, 'https'),
+      this.withTimeout(this.checkHttpRedirect(domain), { pass: false }, 'httpsRedirect'),
+      this.withTimeout(this.checkBlacklists(domain), RBLS.map((list) => ({ list, listed: false, blocked: true })), 'blacklists'),
+      this.withTimeout(this.checkMtaSts(domain), { pass: false, reason: 'policy_unreachable' }, 'mtaSts'),
+      this.withTimeout(this.checkTlsRpt(domain), { pass: false, record: null }, 'tlsRpt'),
+      this.withTimeout(this.checkBimi(domain), { pass: false, record: null }, 'bimi'),
+      this.withTimeout(this.checkCaa(domain), { pass: false, records: [] }, 'caa'),
+      this.withTimeout(this.checkNsCount(domain), { pass: false, count: 0 }, 'nsCount'),
+      this.withTimeout(this.checkDbl(domain), { listed: false }, 'dbl'),
+      this.withTimeout(this.checkPtr(domain), { pass: false, hostname: null }, 'ptr'),
+      this.withTimeout(this.checkDomainExpiry(domain), { pass: true, daysUntilExpiry: null, expiresAt: null }, 'domainExpiry'),
+      this.withTimeout(this.checkDnssec(domain), { pass: false }, 'dnssec'),
+      this.withTimeout(this.checkWwwRedirect(domain), { pass: false, exists: false }, 'wwwRedirect'),
+      this.withTimeout(this.checkMozillaObservatory(domain), { pass: false, grade: null, score: null, pending: false }, 'observatory'),
+      this.withTimeout(this.checkGoogleSafeBrowsing(domain), { pass: true, threats: [] }, 'safeBrowsing'),
     ]);
 
     return {
@@ -189,6 +202,20 @@ export class ReputationService implements OnModuleInit {
       observatory,
       safeBrowsing,
     };
+  }
+
+  private withTimeout<T>(promise: Promise<T>, fallback: T, label: string, timeoutMs = ReputationService.CHECK_TIMEOUT_MS): Promise<T> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.logger.warn(`Reputation check timed out: ${label}`);
+        resolve(fallback);
+      }, timeoutMs);
+
+      promise
+        .then((result) => resolve(result))
+        .catch(() => resolve(fallback))
+        .finally(() => clearTimeout(timer));
+    });
   }
 
   // ── Individual checks ────────────────────────────────────────────────────────
