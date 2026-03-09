@@ -20,8 +20,9 @@ const ADMIN_ITEMS = [
 export function Nav() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const hideOnPublicRoute = pathname === '/' || pathname.startsWith('/login');
 
-  if (!user) return null;
+  if (!user || hideOnPublicRoute) return null;
 
   const items = user.role === 'admin' ? [...NAV_ITEMS, ...ADMIN_ITEMS] : NAV_ITEMS;
 

@@ -72,7 +72,10 @@ export const domainSchema = z.object({
 });
 
 export const delegateAccessSchema = z.object({
-  userId: z.string().uuid(),
+  userId: z.string().uuid().optional(),
+  email: z.string().email().optional(),
+}).refine((value) => value.userId || value.email, {
+  message: 'userId or email is required',
 });
 
 export type CreateDomainPayload = z.infer<typeof createDomainSchema>;

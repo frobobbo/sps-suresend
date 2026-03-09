@@ -52,7 +52,6 @@ const DOCS: Record<string, string> = {
   dbl: 'https://www.spamhaus.org/dbl/',
   observatory: 'https://observatory.mozilla.org/',
   safeBrowsing: 'https://safebrowsing.google.com/',
-  sslLabs: 'https://www.ssllabs.com/ssltest/',
 };
 
 type CheckState = 'pass' | 'fail' | 'warn';
@@ -180,11 +179,6 @@ const HELP: Record<string, Partial<Record<CheckState | 'blocked', string>>> = {
   safeBrowsing: {
     pass: 'Google Safe Browsing found no malware, phishing, or unwanted software associated with this domain.',
     fail: 'Google Safe Browsing has flagged this domain for malware, phishing, or unwanted software. Visitors using Chrome, Firefox, or Safari may see a warning page.',
-  },
-  sslLabs: {
-    pass: 'Qualys SSL Labs rates your TLS configuration A or A+. Strong cipher suites, certificate chain, and protocol support.',
-    warn: 'Qualys SSL Labs rates your TLS configuration B or C. Some TLS configuration improvements are recommended.',
-    fail: 'Qualys SSL Labs rates your TLS configuration D or F, or there are certificate trust issues. Visitors may see security warnings.',
   },
 };
 
@@ -568,15 +562,10 @@ function sslState(ssl: NonNullable<ReputationCheck['details']['ssl']>): CheckSta
   return 'pass';
 }
 function observatoryState(obs: NonNullable<ReputationCheck['details']['observatory']>): CheckState {
+  if (obs.pending) return 'warn';
   if (!obs.grade) return 'fail';
   if (obs.grade.startsWith('A')) return 'pass';
   if (obs.grade.startsWith('B') || obs.grade.startsWith('C')) return 'warn';
-  return 'fail';
-}
-function sslLabsState(sl: NonNullable<ReputationCheck['details']['sslLabs']>): CheckState {
-  if (!sl.grade) return sl.pending ? 'warn' : 'fail';
-  if (sl.grade.startsWith('A')) return 'pass';
-  if (sl.grade.startsWith('B') || sl.grade.startsWith('C')) return 'warn';
   return 'fail';
 }
 
@@ -990,14 +979,14 @@ export default function DomainDetailPage() {
                 )}
               </Section>
 
-              {(d.observatory || d.safeBrowsing || d.sslLabs) && (
+              {(d.observatory || d.safeBrowsing) && (
                 <Section title="External Assessments">
                   {d.observatory && (
                     <Check
                       state={observatoryState(d.observatory)}
-                      label={`Mozilla Observatory${d.observatory.grade ? ` (${d.observatory.grade})` : ' (unavailable)'}`}
+                      label={`Mozilla Observatory${d.observatory.grade ? ` (${d.observatory.grade})` : d.observatory.pending ? ' (scan in progress)' : ' (unavailable)'}`}
                       href={DOCS.observatory}
-                      checkKey="observatory"
+                      checkKey={d.observatory.pending ? undefined : 'observatory'}
                     />
                   )}
                   {d.safeBrowsing && (
@@ -1006,14 +995,6 @@ export default function DomainDetailPage() {
                       label={`Google Safe Browsing${!d.safeBrowsing.pass && d.safeBrowsing.threats.length ? ` (${d.safeBrowsing.threats.join(', ')})` : ''}`}
                       href={DOCS.safeBrowsing}
                       checkKey="safeBrowsing"
-                    />
-                  )}
-                  {d.sslLabs && (
-                    <Check
-                      state={sslLabsState(d.sslLabs)}
-                      label={`SSL Labs${d.sslLabs.grade ? ` (${d.sslLabs.grade})` : d.sslLabs.pending ? ' (scan in progress)' : ' (unavailable)'}`}
-                      href={DOCS.sslLabs}
-                      checkKey="sslLabs"
                     />
                   )}
                 </Section>

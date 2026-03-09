@@ -89,9 +89,8 @@ function buildReportHtml(r: ReportPayload): string {
     tlsVersion?: { pass: boolean; protocol?: string | null };
     blacklists?: { list: string; listed: boolean }[];
     dbl?: { listed: boolean };
-    observatory?: { pass: boolean; grade: string | null; score: number | null };
+    observatory?: { pass: boolean; grade: string | null; score: number | null; pending: boolean };
     safeBrowsing?: { pass: boolean; threats: string[] };
-    sslLabs?: { pass: boolean; grade: string | null; pending: boolean };
   };
 
   const emailRows = [
@@ -123,13 +122,10 @@ function buildReportHtml(r: ReportPayload): string {
 
   const externalRows = [
     d.observatory
-      ? row('Mozilla Observatory', d.observatory.pass, d.observatory.grade ?? 'unavailable')
+      ? row('Mozilla Observatory', d.observatory.pass, d.observatory.grade ?? (d.observatory.pending ? 'scan in progress' : 'unavailable'))
       : '',
     d.safeBrowsing
       ? row('Google Safe Browsing', d.safeBrowsing.pass, d.safeBrowsing.threats.length ? d.safeBrowsing.threats.join(', ') : 'clean')
-      : '',
-    d.sslLabs
-      ? row('SSL Labs', d.sslLabs.pass, d.sslLabs.grade ?? (d.sslLabs.pending ? 'scan in progress — re-run to update' : 'unavailable'))
       : '',
   ].join('');
 

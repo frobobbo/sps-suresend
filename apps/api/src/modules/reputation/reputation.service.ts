@@ -74,9 +74,8 @@ interface CheckDetails {
   domainExpiry?: { pass: boolean; daysUntilExpiry: number | null; expiresAt: string | null };
   dnssec?: { pass: boolean };
   wwwRedirect?: { pass: boolean; exists: boolean };
-  observatory?: { pass: boolean; grade: string | null; score: number | null };
+  observatory?: { pass: boolean; grade: string | null; score: number | null; pending: boolean };
   safeBrowsing?: { pass: boolean; threats: string[] };
-  sslLabs?: { pass: boolean; grade: string | null; pending: boolean };
 }
 
 @Injectable()
@@ -139,7 +138,7 @@ export class ReputationService implements OnModuleInit {
       blacklists, mtaSts, tlsRpt, bimi,
       caa, nsCount, dbl, ptr,
       domainExpiry, dnssec, wwwRedirect,
-      observatory, safeBrowsing, sslLabs,
+      observatory, safeBrowsing,
     ] = await Promise.all([
       this.checkMx(domain),
       this.checkSpf(domain),
@@ -160,7 +159,6 @@ export class ReputationService implements OnModuleInit {
       this.checkWwwRedirect(domain),
       this.checkMozillaObservatory(domain),
       this.checkGoogleSafeBrowsing(domain),
-      this.checkSslLabs(domain),
     ]);
 
     return {
@@ -186,7 +184,6 @@ export class ReputationService implements OnModuleInit {
       wwwRedirect,
       observatory,
       safeBrowsing,
-      sslLabs,
     };
   }
 
@@ -647,25 +644,29 @@ export class ReputationService implements OnModuleInit {
   }
 
   /**
-   * Mozilla Observatory v2 — grades HTTP security header configuration.
-   * The v1 API was shut down Oct 31 2024; v2 is synchronous (no polling needed).
-   * Grade A/A+ = pass.
+   * Mozilla Observatory can return before a grade is available.
+   * Treat that as pending so the UI can communicate that a fresh scan is
+   * still processing instead of showing a hard failure.
    */
   private async checkMozillaObservatory(
     domain: string,
-  ): Promise<{ pass: boolean; grade: string | null; score: number | null }> {
-    const fail = { pass: false, grade: null as string | null, score: null as number | null };
+  ): Promise<{ pass: boolean; grade: string | null; score: number | null; pending: boolean }> {
+    const pending = { pass: false, grade: null as string | null, score: null as number | null, pending: true };
+    const fail = { pass: false, grade: null as string | null, score: null as number | null, pending: false };
     try {
       const res = await this.httpsPostJson(
         'observatory-api.mdn.mozilla.net',
         `/api/v2/scan?host=${encodeURIComponent(domain)}`,
         '',
       );
+      if (res.status === 202) return pending;
       if (res.status !== 200) return fail;
-      const data = res.json as { grade?: string; score?: number; error?: string };
-      if (data.error || !data.grade) return fail;
+      const data = res.json as { grade?: string; score?: number; error?: string; state?: string };
+      if (data.state === 'RUNNING' || data.state === 'PENDING') return pending;
+      if (data.error) return fail;
+      if (!data.grade) return pending;
       const grade = data.grade;
-      return { pass: grade.startsWith('A'), grade, score: data.score ?? null };
+      return { pass: grade.startsWith('A'), grade, score: data.score ?? null, pending: false };
     } catch {
       return fail;
     }
@@ -701,48 +702,6 @@ export class ReputationService implements OnModuleInit {
       return { pass: threats.length === 0, threats };
     } catch {
       return { pass: true, threats: [] }; // fail open — don't penalise on API error
-    }
-  }
-
-  /**
-   * Qualys SSL Labs v4 — deep SSL/TLS grading.
-   * Tries the cache first; if no cached result, kicks off a background scan and
-   * returns pending=true. The next run (60-90s later) will hit the cache.
-   * v3 was deprecated Dec 31 2023; now uses v4.
-   */
-  private async checkSslLabs(
-    domain: string,
-  ): Promise<{ pass: boolean; grade: string | null; pending: boolean }> {
-    const fail = { pass: false, grade: null as string | null, pending: false };
-
-    const extractGrade = (data: Record<string, unknown>): string | null =>
-      ((data.endpoints as { grade?: string }[] | undefined)?.[0]?.grade) ?? null;
-
-    const email = process.env.SSLLABS_EMAIL ?? 'monitor@suresend.io';
-
-    try {
-      // 1. Try cache (v4 endpoint — requires email header)
-      const cached = await this.httpsGetJson(
-        'api.ssllabs.com',
-        `/api/v4/analyze?host=${encodeURIComponent(domain)}&fromCache=on&maxAge=24&all=done`,
-        { email },
-      );
-      const cachedData = cached.json as Record<string, unknown>;
-      if (cachedData.status === 'READY') {
-        const grade = extractGrade(cachedData);
-        if (grade) return { pass: !grade.startsWith('F') && grade !== 'T', grade, pending: false };
-      }
-
-      // 2. Not cached — kick off scan in the background and return pending.
-      //    SSL Labs takes 60-90s minimum; the next scan run will hit the cache.
-      this.httpsGetJson(
-        'api.ssllabs.com',
-        `/api/v4/analyze?host=${encodeURIComponent(domain)}&startNew=on&all=done`,
-        { email },
-      ).catch(() => {});
-      return { pass: false, grade: null, pending: true };
-    } catch {
-      return fail;
     }
   }
 

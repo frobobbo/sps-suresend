@@ -212,9 +212,8 @@ export interface ReputationCheck {
     domainExpiry?: { pass: boolean; daysUntilExpiry: number | null; expiresAt: string | null };
     dnssec?: { pass: boolean };
     wwwRedirect?: { pass: boolean; exists: boolean };
-    observatory?: { pass: boolean; grade: string | null; score: number | null };
+    observatory?: { pass: boolean; grade: string | null; score: number | null; pending: boolean };
     safeBrowsing?: { pass: boolean; threats: string[] };
-    sslLabs?: { pass: boolean; grade: string | null; pending: boolean };
   };
   checkedAt: string;
 }
