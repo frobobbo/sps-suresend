@@ -762,6 +762,7 @@ export default function DomainDetailPage() {
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const [savingMonitoring, setSavingMonitoring] = useState(false);
   const [monitoringError, setMonitoringError] = useState<string | null>(null);
+  const [monitoringDialogOpen, setMonitoringDialogOpen] = useState(false);
   const [spfDialogOpen, setSpfDialogOpen] = useState(false);
   const [dmarcDialogOpen, setDmarcDialogOpen] = useState(false);
   const [dkimDialogOpen, setDkimDialogOpen] = useState(false);
@@ -851,8 +852,10 @@ export default function DomainDetailPage() {
     try {
       const settings = await domainsApi.updateMonitoring(id, { scanIntervalMinutes, alertsEnabled });
       setDomain((prev) => prev ? { ...prev, ...settings } : prev);
+      return true;
     } catch (err: any) {
       setMonitoringError(err.message ?? 'Unable to save monitoring settings');
+      return false;
     } finally {
       setSavingMonitoring(false);
     }
@@ -913,7 +916,7 @@ export default function DomainDetailPage() {
       ? 'Scan Running'
       : activeJob?.status === 'queued'
         ? 'Scan Queued'
-        : 'Run Check';
+        : 'Scan Now';
   // Free-tier users always see fix buttons (clicking opens upgrade dialog).
   // Plus/Pro users who manage the domain and have CF connected get the actual fix.
   const handleFixIntent = async (check: string) => {
@@ -988,6 +991,74 @@ export default function DomainDetailPage() {
               </Dialog>
             )
           )}
+          {canManage && (
+            <Dialog open={monitoringDialogOpen} onOpenChange={setMonitoringDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" disabled={!domain.verifiedAt}>
+                  Schedule Scan
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Scheduled Monitoring</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <p className="text-sm text-slate-600">
+                    SureSend can queue recurring scans in the background and email the domain owner when the status changes or a verified domain first scans unhealthy.
+                  </p>
+                  <form
+                    onSubmit={async (e) => {
+                      const saved = await handleSaveMonitoring(e);
+                      if (saved) setMonitoringDialogOpen(false);
+                    }}
+                    className="space-y-4"
+                  >
+                    <div className="space-y-2">
+                      <Label htmlFor="scanIntervalMinutes">Scan frequency</Label>
+                      <select
+                        id="scanIntervalMinutes"
+                        name="scanIntervalMinutes"
+                        defaultValue={domain.scanIntervalMinutes === null ? 'off' : String(domain.scanIntervalMinutes)}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        disabled={!domain.verifiedAt || savingMonitoring}
+                      >
+                        <option value="off">Off</option>
+                        <option value="15">Every 15 minutes</option>
+                        <option value="60">Hourly</option>
+                        <option value="360">Every 6 hours</option>
+                        <option value="1440">Daily</option>
+                      </select>
+                    </div>
+                    <label className="flex items-start gap-3 rounded-md border border-slate-200 p-3">
+                      <input
+                        type="checkbox"
+                        name="alertsEnabled"
+                        defaultChecked={domain.alertsEnabled}
+                        disabled={!domain.verifiedAt || savingMonitoring}
+                        className="mt-1"
+                      />
+                      <div>
+                        <p className="text-sm font-medium text-slate-700">Email alerts on status changes</p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Sends the reputation report to the domain owner when a scheduled scan changes from clean to warning or critical, recovers, or the first scheduled result is unhealthy.
+                        </p>
+                      </div>
+                    </label>
+                    {monitoringError && <Alert variant="destructive"><AlertDescription>{monitoringError}</AlertDescription></Alert>}
+                    {domain.lastScheduledScanAt && (
+                      <p className="text-xs text-slate-500">
+                        Last scheduled scan queued on {new Date(domain.lastScheduledScanAt).toLocaleString()}.
+                      </p>
+                    )}
+                    <Button type="submit" disabled={savingMonitoring || !domain.verifiedAt} className="w-full">
+                      {savingMonitoring && <Loader2 size={14} className="mr-2 animate-spin" />}
+                      Save Monitoring Settings
+                    </Button>
+                  </form>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
           <Button onClick={handleRunCheck} disabled={running || !!activeJob || !domain.verifiedAt}>
             {(running || activeJob) ? <Loader2 size={16} className="mr-2 animate-spin" /> : <RefreshCw size={16} className="mr-2" />}
             {runButtonLabel}
@@ -1015,7 +1086,7 @@ export default function DomainDetailPage() {
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+      {!domain.verifiedAt && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center justify-between">
@@ -1060,81 +1131,7 @@ export default function DomainDetailPage() {
             )}
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Scheduled Monitoring</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-slate-600">
-              SureSend can queue recurring scans in the background and email the domain owner when the status changes or a verified domain first scans unhealthy.
-            </p>
-            {canManage ? (
-              <form onSubmit={handleSaveMonitoring} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="scanIntervalMinutes">Scan frequency</Label>
-                  <select
-                    id="scanIntervalMinutes"
-                    name="scanIntervalMinutes"
-                    defaultValue={domain.scanIntervalMinutes === null ? 'off' : String(domain.scanIntervalMinutes)}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    disabled={!domain.verifiedAt || savingMonitoring}
-                  >
-                    <option value="off">Off</option>
-                    <option value="15">Every 15 minutes</option>
-                    <option value="60">Hourly</option>
-                    <option value="360">Every 6 hours</option>
-                    <option value="1440">Daily</option>
-                  </select>
-                </div>
-                <label className="flex items-start gap-3 rounded-md border border-slate-200 p-3">
-                  <input
-                    type="checkbox"
-                    name="alertsEnabled"
-                    defaultChecked={domain.alertsEnabled}
-                    disabled={!domain.verifiedAt || savingMonitoring}
-                    className="mt-1"
-                  />
-                  <div>
-                    <p className="text-sm font-medium text-slate-700">Email alerts on status changes</p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Sends the reputation report to the domain owner when a scheduled scan changes from clean to warning/critical, recovers, or the first scheduled result is unhealthy.
-                    </p>
-                  </div>
-                </label>
-                {!domain.verifiedAt && (
-                  <Alert>
-                    <AlertDescription>Verify the domain before enabling background monitoring.</AlertDescription>
-                  </Alert>
-                )}
-                {monitoringError && <Alert variant="destructive"><AlertDescription>{monitoringError}</AlertDescription></Alert>}
-                <Button type="submit" disabled={savingMonitoring || !domain.verifiedAt}>
-                  {savingMonitoring && <Loader2 size={14} className="mr-2 animate-spin" />}
-                  Save Monitoring Settings
-                </Button>
-              </form>
-            ) : (
-              <div className="space-y-2 text-sm text-slate-600">
-                <p>
-                  Frequency: {domain.scanIntervalMinutes ? (
-                    domain.scanIntervalMinutes === 15 ? 'Every 15 minutes'
-                    : domain.scanIntervalMinutes === 60 ? 'Hourly'
-                    : domain.scanIntervalMinutes === 360 ? 'Every 6 hours'
-                    : domain.scanIntervalMinutes === 1440 ? 'Daily'
-                    : `Every ${domain.scanIntervalMinutes} minutes`
-                  ) : 'Off'}
-                </p>
-                <p>Alerts: {domain.alertsEnabled ? 'Enabled' : 'Disabled'}</p>
-              </div>
-            )}
-            {domain.lastScheduledScanAt && (
-              <p className="text-xs text-slate-500">
-                Last scheduled scan queued on {new Date(domain.lastScheduledScanAt).toLocaleString()}.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      )}
 
       {/* Prompt to connect Cloudflare when there are fixable failures */}
       {!domain.cloudflareConnected && canManage && d && (

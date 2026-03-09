@@ -51,6 +51,10 @@ export class ScanQueueService implements OnModuleInit, OnModuleDestroy {
     if (this.schedulerTimer) clearInterval(this.schedulerTimer);
   }
 
+  async kickManualQueue(): Promise<void> {
+    await this.processDueJobs();
+  }
+
   async enqueueManual(domainId: string, requestedByUserId: string): Promise<ScanJob> {
     const existing = await this.jobRepo.findOne({
       where: [

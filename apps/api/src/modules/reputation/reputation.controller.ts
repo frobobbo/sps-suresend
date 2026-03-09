@@ -54,6 +54,7 @@ export class ReputationController {
         throw new BadRequestException('Verify this domain before running scans');
       }
       const job = await this.scanQueueService.enqueueManual(domainId, user.id);
+      void this.scanQueueService.kickManualQueue();
 
       await this.auditService.record({
         action: 'reputation.check',
