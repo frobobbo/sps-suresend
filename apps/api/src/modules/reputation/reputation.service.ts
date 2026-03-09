@@ -64,7 +64,11 @@ interface CheckDetails {
     permissionsPolicy: boolean;
   };
   tlsVersion?: { protocol: string | null; pass: boolean };
-  mtaSts?: { pass: boolean; policy?: string };
+  mtaSts?: {
+    pass: boolean;
+    policy?: string;
+    reason?: 'missing_txt' | 'policy_unreachable' | 'policy_invalid' | 'mode_not_enforce';
+  };
   tlsRpt?: { pass: boolean; record: string | null };
   bimi?: { pass: boolean; record: string | null };
   caa?: { pass: boolean; records: string[] };
@@ -372,18 +376,28 @@ export class ReputationService implements OnModuleInit {
     });
   }
 
-  private async checkMtaSts(domain: string): Promise<{ pass: boolean; policy?: string }> {
+  private async checkMtaSts(domain: string): Promise<{
+    pass: boolean;
+    policy?: string;
+    reason?: 'missing_txt' | 'policy_unreachable' | 'policy_invalid' | 'mode_not_enforce';
+  }> {
     try {
       const txt = await this.dnsClient.resolveTxt(`_mta-sts.${domain}`);
       const flat = txt.map((r) => r.join(''));
-      if (!flat.some((r) => r.startsWith('v=STSv1'))) return { pass: false };
+      if (!flat.some((r) => r.startsWith('v=STSv1'))) {
+        return { pass: false, reason: 'missing_txt' };
+      }
     } catch {
-      return { pass: false };
+      return { pass: false, reason: 'missing_txt' };
     }
     return this.fetchMtaStsPolicy(`https://mta-sts.${domain}/.well-known/mta-sts.txt`, false);
   }
 
-  private fetchMtaStsPolicy(url: string, followed: boolean): Promise<{ pass: boolean; policy?: string }> {
+  private fetchMtaStsPolicy(url: string, followed: boolean): Promise<{
+    pass: boolean;
+    policy?: string;
+    reason?: 'policy_unreachable' | 'policy_invalid' | 'mode_not_enforce';
+  }> {
     return new Promise((resolve) => {
       const req = https.get(url, { timeout: 5000 }, (res) => {
         const sc = res.statusCode ?? 0;
@@ -396,14 +410,25 @@ export class ReputationService implements OnModuleInit {
         let body = '';
         res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
         res.on('end', () => {
-          if (sc !== 200) { resolve({ pass: false }); return; }
+          if (sc !== 200) {
+            resolve({ pass: false, reason: 'policy_unreachable' });
+            return;
+          }
           const m = /^mode:\s*(\S+)/m.exec(body);
           const policy = m?.[1]?.trim();
-          resolve({ pass: policy === 'enforce', policy });
+          if (!policy) {
+            resolve({ pass: false, reason: 'policy_invalid' });
+            return;
+          }
+          if (policy !== 'enforce') {
+            resolve({ pass: false, policy, reason: 'mode_not_enforce' });
+            return;
+          }
+          resolve({ pass: true, policy });
         });
       });
-      req.on('error', () => resolve({ pass: false }));
-      req.on('timeout', () => { req.destroy(); resolve({ pass: false }); });
+      req.on('error', () => resolve({ pass: false, reason: 'policy_unreachable' }));
+      req.on('timeout', () => { req.destroy(); resolve({ pass: false, reason: 'policy_unreachable' }); });
     });
   }
 

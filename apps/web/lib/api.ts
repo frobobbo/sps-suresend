@@ -202,7 +202,11 @@ export interface ReputationCheck {
     ssl?: { pass: boolean; daysUntilExpiry: number | null; expiresAt: string | null };
     securityHeaders?: { hsts: boolean; xContentTypeOptions: boolean; xFrameOptions: boolean; csp: boolean; referrerPolicy: boolean; permissionsPolicy: boolean };
     tlsVersion?: { protocol: string | null; pass: boolean };
-    mtaSts?: { pass: boolean; policy?: string };
+    mtaSts?: {
+      pass: boolean;
+      policy?: string;
+      reason?: 'missing_txt' | 'policy_unreachable' | 'policy_invalid' | 'mode_not_enforce';
+    };
     tlsRpt?: { pass: boolean; record: string | null };
     bimi?: { pass: boolean; record: string | null };
     caa?: { pass: boolean; records: string[] };

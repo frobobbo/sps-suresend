@@ -54,6 +54,10 @@ const DOCS: Record<string, string> = {
   safeBrowsing: 'https://safebrowsing.google.com/',
 };
 
+function observatoryReportUrl(domain: string): string {
+  return `https://observatory.mozilla.org/analyze/${encodeURIComponent(domain)}`;
+}
+
 type CheckState = 'pass' | 'fail' | 'warn';
 
 const HELP: Record<string, Partial<Record<CheckState | 'blocked', string>>> = {
@@ -102,7 +106,7 @@ const HELP: Record<string, Partial<Record<CheckState | 'blocked', string>>> = {
   },
   mtaSts: {
     pass: 'MTA-STS policy is published. Mail servers are required to use TLS (encryption) when delivering mail to your domain.',
-    fail: 'No MTA-STS policy found. Emails delivered to your domain may travel without TLS encryption, exposing them to interception.',
+    fail: 'MTA-STS is not fully enforced. The check may have found no `_mta-sts` TXT record, an unreachable policy file, or a policy mode other than `enforce`.',
   },
   tlsRpt: {
     pass: 'TLS-RPT is configured. You will receive reports if TLS delivery to your domain fails, so you can fix problems quickly.',
@@ -561,6 +565,21 @@ function sslState(ssl: NonNullable<ReputationCheck['details']['ssl']>): CheckSta
   if (ssl.daysUntilExpiry !== null && ssl.daysUntilExpiry < 30) return 'warn';
   return 'pass';
 }
+function mtaStsLabel(mtaSts: NonNullable<ReputationCheck['details']['mtaSts']>): string {
+  if (mtaSts.pass) return `MTA-STS${mtaSts.policy ? ` (${mtaSts.policy})` : ''}`;
+  switch (mtaSts.reason) {
+    case 'missing_txt':
+      return 'MTA-STS (missing _mta-sts TXT record)';
+    case 'policy_unreachable':
+      return 'MTA-STS (policy file unreachable)';
+    case 'policy_invalid':
+      return 'MTA-STS (policy file invalid)';
+    case 'mode_not_enforce':
+      return `MTA-STS (${mtaSts.policy ?? 'policy'} mode is not enforce)`;
+    default:
+      return 'MTA-STS';
+  }
+}
 function observatoryState(obs: NonNullable<ReputationCheck['details']['observatory']>): CheckState {
   if (obs.pending) return 'warn';
   if (!obs.grade) return 'fail';
@@ -842,7 +861,7 @@ export default function DomainDetailPage() {
               <Section title="Transport Security">
                 {d.mtaSts ? (
                   <Check state={d.mtaSts.pass ? 'pass' : 'fail'}
-                    label={`MTA-STS${d.mtaSts.policy ? ` (${d.mtaSts.policy})` : ''}`}
+                    label={mtaStsLabel(d.mtaSts)}
                     href={DOCS.mtaSts} fixKey="mtaSts" onFix={onFix} fixing={fixing === 'mtaSts'} />
                 ) : null}
                 {d.tlsRpt ? (
@@ -982,12 +1001,24 @@ export default function DomainDetailPage() {
               {(d.observatory || d.safeBrowsing) && (
                 <Section title="External Assessments">
                   {d.observatory && (
-                    <Check
-                      state={observatoryState(d.observatory)}
-                      label={`Mozilla Observatory${d.observatory.grade ? ` (${d.observatory.grade})` : d.observatory.pending ? ' (scan in progress)' : ' (unavailable)'}`}
-                      href={DOCS.observatory}
-                      checkKey={d.observatory.pending ? undefined : 'observatory'}
-                    />
+                    <div className="space-y-1">
+                      <Check
+                        state={observatoryState(d.observatory)}
+                        label={`Mozilla Observatory${d.observatory.grade ? ` (${d.observatory.grade})` : d.observatory.pending ? ' (scan in progress)' : ' (unavailable)'}`}
+                        href={DOCS.observatory}
+                        checkKey={d.observatory.pending ? undefined : 'observatory'}
+                      />
+                      <div className="pl-7">
+                        <a
+                          href={observatoryReportUrl(domain.name)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] text-sky-600 hover:underline"
+                        >
+                          View full Observatory report <ExternalLink size={10} />
+                        </a>
+                      </div>
+                    </div>
                   )}
                   {d.safeBrowsing && (
                     <Check

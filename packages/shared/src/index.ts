@@ -120,7 +120,11 @@ export const reputationCheckSchema = z.object({
       xContentTypeOptions: z.boolean(),
       xFrameOptions: z.boolean(),
     }).optional(),
-    mtaSts: z.object({ pass: z.boolean(), policy: z.string().optional() }).optional(),
+    mtaSts: z.object({
+      pass: z.boolean(),
+      policy: z.string().optional(),
+      reason: z.enum(['missing_txt', 'policy_unreachable', 'policy_invalid', 'mode_not_enforce']).optional(),
+    }).optional(),
     tlsRpt: z.object({ pass: z.boolean(), record: z.string().nullable() }).optional(),
     bimi: z.object({ pass: z.boolean(), record: z.string().nullable() }).optional(),
     caa: z.object({ pass: z.boolean(), records: z.array(z.string()) }).optional(),
