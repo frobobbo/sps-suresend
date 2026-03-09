@@ -498,6 +498,159 @@ function BimiFixDialog({
   );
 }
 
+function SpfFixDialog({
+  open, onClose, domainName, onSubmit, submitting,
+}: {
+  open: boolean;
+  onClose: () => void;
+  domainName: string;
+  onSubmit: (payload: unknown) => Promise<void>;
+  submitting: boolean;
+}) {
+  const [mode, setMode] = useState<'-all' | '~all'>('-all');
+  const [err, setErr] = useState('');
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr('');
+    try {
+      await onSubmit({ mode });
+      onClose();
+    } catch (ex: any) {
+      setErr(ex.message ?? 'Failed to publish SPF record');
+    }
+  }
+
+  const preview = `v=spf1 mx ${mode}`;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Set up SPF Policy</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+          <div className="space-y-2">
+            <p className="text-sm text-slate-600">
+              Choose how strictly mail servers should treat messages sent from sources not listed in your SPF record.
+            </p>
+            <label className="block rounded-md border border-slate-200 p-3 cursor-pointer">
+              <div className="flex items-start gap-3">
+                <input type="radio" name="spf-mode" checked={mode === '-all'} onChange={() => setMode('-all')} className="mt-1" />
+                <div>
+                  <p className="text-sm font-medium text-slate-700">`-all` Recommended for mature setups</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Tells receivers to reject mail from senders not explicitly allowed. Best protection against spoofing, but only use it when you are confident all legitimate senders are included.
+                  </p>
+                </div>
+              </div>
+            </label>
+            <label className="block rounded-md border border-slate-200 p-3 cursor-pointer">
+              <div className="flex items-start gap-3">
+                <input type="radio" name="spf-mode" checked={mode === '~all'} onChange={() => setMode('~all')} className="mt-1" />
+                <div>
+                  <p className="text-sm font-medium text-slate-700">`~all` Safer transition option</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Marks unexpected senders as suspicious instead of hard-failing them. Useful when you are still validating every service that sends mail for your domain.
+                  </p>
+                </div>
+              </div>
+            </label>
+          </div>
+          <div className="rounded-md bg-slate-50 p-3 space-y-1.5">
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Record preview</p>
+            <p className="text-[11px] font-mono text-slate-500">{domainName}</p>
+            <p className="text-[11px] font-mono text-slate-700 break-all">{preview}</p>
+            <p className="text-[11px] text-slate-400">
+              SureSend will still auto-detect Google Workspace or Microsoft 365 and use the right include if those providers are found.
+            </p>
+          </div>
+          {err && <Alert variant="destructive"><AlertDescription>{err}</AlertDescription></Alert>}
+          <Button type="submit" className="w-full" disabled={submitting}>
+            {submitting && <Loader2 size={14} className="mr-2 animate-spin" />}
+            Publish to Cloudflare
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DmarcFixDialog({
+  open, onClose, domainName, onSubmit, submitting,
+}: {
+  open: boolean;
+  onClose: () => void;
+  domainName: string;
+  onSubmit: (payload: unknown) => Promise<void>;
+  submitting: boolean;
+}) {
+  const [policy, setPolicy] = useState<'reject' | 'quarantine'>('reject');
+  const [err, setErr] = useState('');
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr('');
+    try {
+      await onSubmit({ policy });
+      onClose();
+    } catch (ex: any) {
+      setErr(ex.message ?? 'Failed to publish DMARC record');
+    }
+  }
+
+  const preview = `v=DMARC1; p=${policy}; rua=mailto:dmarc@${domainName}`;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Set up DMARC Policy</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+          <div className="space-y-2">
+            <p className="text-sm text-slate-600">
+              Choose what receivers should do when a message fails DMARC alignment checks.
+            </p>
+            <label className="block rounded-md border border-slate-200 p-3 cursor-pointer">
+              <div className="flex items-start gap-3">
+                <input type="radio" name="dmarc-policy" checked={policy === 'reject'} onChange={() => setPolicy('reject')} className="mt-1" />
+                <div>
+                  <p className="text-sm font-medium text-slate-700">`p=reject` Strongest protection</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Failing messages should be rejected outright. Best once SPF and DKIM are stable across all legitimate senders.
+                  </p>
+                </div>
+              </div>
+            </label>
+            <label className="block rounded-md border border-slate-200 p-3 cursor-pointer">
+              <div className="flex items-start gap-3">
+                <input type="radio" name="dmarc-policy" checked={policy === 'quarantine'} onChange={() => setPolicy('quarantine')} className="mt-1" />
+                <div>
+                  <p className="text-sm font-medium text-slate-700">`p=quarantine` Recommended stepping stone</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Failing messages are usually sent to spam instead of rejected. Good when you want stronger protection without moving straight to hard rejection.
+                  </p>
+                </div>
+              </div>
+            </label>
+          </div>
+          <div className="rounded-md bg-slate-50 p-3 space-y-1.5">
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Record preview</p>
+            <p className="text-[11px] font-mono text-slate-500">_dmarc.{domainName}</p>
+            <p className="text-[11px] font-mono text-slate-700 break-all">{preview}</p>
+          </div>
+          {err && <Alert variant="destructive"><AlertDescription>{err}</AlertDescription></Alert>}
+          <Button type="submit" className="w-full" disabled={submitting}>
+            {submitting && <Loader2 size={14} className="mr-2 animate-spin" />}
+            Publish to Cloudflare
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function spfLabel(spf: ReputationCheck['details']['spf']): string {
   if (!spf.pass) return 'SPF Record';
   const map: Record<string, string> = {
@@ -602,6 +755,8 @@ export default function DomainDetailPage() {
   const [cfToken, setCfToken] = useState('');
   const [cfSaving, setCfSaving] = useState(false);
   const [cfError, setCfError] = useState('');
+  const [spfDialogOpen, setSpfDialogOpen] = useState(false);
+  const [dmarcDialogOpen, setDmarcDialogOpen] = useState(false);
   const [dkimDialogOpen, setDkimDialogOpen] = useState(false);
   const [bimiDialogOpen, setBimiDialogOpen] = useState(false);
   const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
@@ -673,8 +828,19 @@ export default function DomainDetailPage() {
   const d = latest?.details;
   // Free-tier users always see fix buttons (clicking opens upgrade dialog).
   // Plus/Pro users who manage the domain and have CF connected get the actual fix.
+  const handleFixIntent = async (check: string) => {
+    if (check === 'spf') {
+      setSpfDialogOpen(true);
+      return;
+    }
+    if (check === 'dmarc') {
+      setDmarcDialogOpen(true);
+      return;
+    }
+    await handleFix(check);
+  };
   const onFix = canFix
-    ? (canManage && domain.cloudflareConnected ? handleFix : undefined)
+    ? (canManage && domain.cloudflareConnected ? handleFixIntent : undefined)
     : () => setUpgradeDialogOpen(true);
 
   return (
@@ -1044,27 +1210,45 @@ export default function DomainDetailPage() {
       )}
 
       {/* Dialogs — rendered outside the grid so they can overlay correctly */}
-      {latest && d && d.mx.mailProvider && (
-        <DkimFixDialog
-          open={dkimDialogOpen}
-          onClose={() => setDkimDialogOpen(false)}
-          provider={d.mx.mailProvider}
-          domainName={domain.name}
-          submitting={fixing === 'dkim-google' || fixing === 'dkim-microsoft'}
-          onSubmit={async (payload) => {
-            const check = d.mx.mailProvider === 'google' ? 'dkim-google' : 'dkim-microsoft';
-            await handleFix(check, payload);
-          }}
-        />
-      )}
-      {latest && d && d.bimi && !d.bimi.pass && domain.cloudflareConnected && canManage && (
-        <BimiFixDialog
-          open={bimiDialogOpen}
-          onClose={() => setBimiDialogOpen(false)}
-          domainName={domain.name}
-          submitting={fixing === 'bimi'}
-          onSubmit={async (payload) => { await handleFix('bimi', payload); }}
-        />
+      {latest && d && (
+        <>
+          <SpfFixDialog
+            open={spfDialogOpen}
+            onClose={() => setSpfDialogOpen(false)}
+            domainName={domain.name}
+            submitting={fixing === 'spf'}
+            onSubmit={async (payload) => { await handleFix('spf', payload); }}
+          />
+          <DmarcFixDialog
+            open={dmarcDialogOpen}
+            onClose={() => setDmarcDialogOpen(false)}
+            domainName={domain.name}
+            submitting={fixing === 'dmarc'}
+            onSubmit={async (payload) => { await handleFix('dmarc', payload); }}
+          />
+          {d.mx.mailProvider && (
+            <DkimFixDialog
+              open={dkimDialogOpen}
+              onClose={() => setDkimDialogOpen(false)}
+              provider={d.mx.mailProvider}
+              domainName={domain.name}
+              submitting={fixing === 'dkim-google' || fixing === 'dkim-microsoft'}
+              onSubmit={async (payload) => {
+                const check = d.mx.mailProvider === 'google' ? 'dkim-google' : 'dkim-microsoft';
+                await handleFix(check, payload);
+              }}
+            />
+          )}
+          {d.bimi && !d.bimi.pass && domain.cloudflareConnected && canManage && (
+            <BimiFixDialog
+              open={bimiDialogOpen}
+              onClose={() => setBimiDialogOpen(false)}
+              domainName={domain.name}
+              submitting={fixing === 'bimi'}
+              onSubmit={async (payload) => { await handleFix('bimi', payload); }}
+            />
+          )}
+        </>
       )}
       <Dialog open={upgradeDialogOpen} onOpenChange={(o) => !o && setUpgradeDialogOpen(false)}>
         <DialogContent>

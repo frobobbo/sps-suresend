@@ -160,20 +160,27 @@ export class CloudflareService {
    * the provider's canonical SPF mechanism instead of a generic `mx` lookup.
    */
   private async buildSpfRecord(domain: string): Promise<string> {
+    return this.buildSpfRecordWithMode(domain, '~all');
+  }
+
+  private async buildSpfRecordWithMode(
+    domain: string,
+    mode: '-all' | '~all',
+  ): Promise<string> {
     try {
       const records = await dns.resolveMx(domain);
       for (const { exchange } of records) {
         if (/google|gmail/i.test(exchange)) {
-          return 'v=spf1 include:_spf.google.com ~all';
+          return `v=spf1 include:_spf.google.com ${mode}`;
         }
         if (/outlook\.com|protection\.outlook/i.test(exchange)) {
-          return 'v=spf1 include:spf.protection.outlook.com ~all';
+          return `v=spf1 include:spf.protection.outlook.com ${mode}`;
         }
       }
     } catch {
       // Fall through to generic record
     }
-    return 'v=spf1 mx ~all';
+    return `v=spf1 mx ${mode}`;
   }
 
   // ── Public: apply fix ────────────────────────────────────────────────────────
@@ -188,13 +195,15 @@ export class CloudflareService {
 
     switch (check) {
       case 'spf': {
-        const content = await this.buildSpfRecord(domain);
+        const mode = payload?.mode === '-all' ? '-all' : '~all';
+        const content = await this.buildSpfRecordWithMode(domain, mode);
         await this.upsertTxtRecord(token, zoneId, domain, content);
         return { record: content, action: 'TXT record upserted at ' + domain };
       }
 
       case 'dmarc': {
-        const content = `v=DMARC1; p=quarantine; rua=mailto:dmarc@${domain}`;
+        const policy = payload?.policy === 'reject' ? 'reject' : 'quarantine';
+        const content = `v=DMARC1; p=${policy}; rua=mailto:dmarc@${domain}`;
         await this.upsertTxtRecord(token, zoneId, `_dmarc.${domain}`, content);
         return { record: content, action: `TXT record upserted at _dmarc.${domain}` };
       }
