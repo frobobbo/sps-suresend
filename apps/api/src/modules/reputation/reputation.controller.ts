@@ -6,13 +6,18 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { ReputationService } from './reputation.service';
 import { DomainsService } from '../domains/domains.service';
 import { MailService } from '../mail/mail.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { AuditService } from '../audit/audit.service';
+import { RateLimit } from '../security/rate-limit.decorator';
+import { RateLimitGuard } from '../security/rate-limit.guard';
 
 @Controller('domains/:domainId/reputation')
 @UseGuards(JwtAuthGuard)
@@ -21,6 +26,7 @@ export class ReputationController {
     private readonly reputationService: ReputationService,
     private readonly domainsService: DomainsService,
     private readonly mailService: MailService,
+    private readonly auditService: AuditService,
   ) {}
 
   @Get()
@@ -34,24 +40,52 @@ export class ReputationController {
 
   @Post('check')
   @HttpCode(HttpStatus.CREATED)
+  @UseGuards(RateLimitGuard)
+  @RateLimit({ keyPrefix: 'reputation-check', limit: 30, windowMs: 60 * 60 * 1000 })
   async runCheck(
     @Param('domainId', ParseUUIDPipe) domainId: string,
     @CurrentUser() user: { id: string; email: string; role: 'admin' | 'user'; tier: 'free' | 'plus' | 'pro' },
+    @Req() req: Request,
   ) {
-    const domain = await this.domainsService.findOne(domainId, user); // access check
-    const check = await this.reputationService.runCheck(domainId, domain.name);
+    try {
+      const domain = await this.domainsService.findOne(domainId, user); // access check
+      const check = await this.reputationService.runCheck(domainId, domain.name);
 
-    // Send email report — fire and forget, never throw
-    void this.mailService.sendReputationReport(user.email, {
-      domainName: domain.name,
-      score: check.score,
-      emailScore: check.emailScore,
-      webScore: check.webScore,
-      status: check.status,
-      checkedAt: check.checkedAt,
-      details: check.details as Record<string, unknown>,
-    });
+      await this.auditService.record({
+        action: 'reputation.check',
+        actorId: user.id,
+        actorEmail: user.email,
+        resourceType: 'domain',
+        resourceId: domainId,
+        status: 'success',
+        ip: req.ip,
+        metadata: { score: check.score, statusLabel: check.status },
+      });
 
-    return check;
+      // Send email report — fire and forget, never throw
+      void this.mailService.sendReputationReport(user.email, {
+        domainName: domain.name,
+        score: check.score,
+        emailScore: check.emailScore,
+        webScore: check.webScore,
+        status: check.status,
+        checkedAt: check.checkedAt,
+        details: check.details as Record<string, unknown>,
+      });
+
+      return check;
+    } catch (error) {
+      await this.auditService.record({
+        action: 'reputation.check',
+        actorId: user.id,
+        actorEmail: user.email,
+        resourceType: 'domain',
+        resourceId: domainId,
+        status: 'failure',
+        ip: req.ip,
+        metadata: { reason: error instanceof Error ? error.message : 'unknown' },
+      });
+      throw error;
+    }
   }
 }

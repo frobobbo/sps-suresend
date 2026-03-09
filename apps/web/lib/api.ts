@@ -57,6 +57,12 @@ export const auth = {
 export const users = {
   list: () => apiFetch<User[]>('/users'),
 
+  lookup: (email: string) =>
+    apiFetch<User | null>('/users/lookup', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
   create: (email: string, password: string, role: 'admin' | 'user') =>
     apiFetch<User>('/users', {
       method: 'POST',
@@ -95,10 +101,10 @@ export const domains = {
   remove: (id: string) =>
     apiFetch<void>(`/domains/${id}`, { method: 'DELETE' }),
 
-  delegate: (domainId: string, userId: string) =>
+  delegate: (domainId: string, body: { userId?: string; email?: string }) =>
     apiFetch(`/domains/${domainId}/access`, {
       method: 'POST',
-      body: JSON.stringify({ userId }),
+      body: JSON.stringify(body),
     }),
 
   revokeAccess: (domainId: string, userId: string) =>

@@ -94,7 +94,7 @@ export default function UsersPage() {
 
   async function handleGrantDomain() {
     if (!grantFor || !grantDomainId) return;
-    await domainsApi.delegate(grantDomainId, grantFor);
+    await domainsApi.delegate(grantDomainId, { userId: grantFor });
     const updated = await domainsApi.list();
     setAllDomains(updated);
     setGrantFor(null);

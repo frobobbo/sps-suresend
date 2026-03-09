@@ -10,10 +10,14 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
 import { WorkspacesModule } from './modules/workspaces/workspaces.module';
 import { SeedModule } from './seed/seed.module';
 import { SettingsModule } from './modules/settings/settings.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { SecurityModule } from './modules/security/security.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    AuditModule,
+    SecurityModule,
     DatabaseModule,
     AuthModule,
     UsersModule,

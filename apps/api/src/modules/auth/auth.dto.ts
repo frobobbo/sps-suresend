@@ -34,3 +34,8 @@ export class UpdateUserRoleDto {
   @IsEnum(['admin', 'user'])
   role!: 'admin' | 'user';
 }
+
+export class UserLookupDto {
+  @IsEmail()
+  email!: string;
+}

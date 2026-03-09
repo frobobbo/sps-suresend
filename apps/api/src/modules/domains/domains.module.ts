@@ -5,9 +5,10 @@ import { DomainAccess } from './domain-access.entity';
 import { DomainsService } from './domains.service';
 import { DomainsController } from './domains.controller';
 import { CloudflareService } from './cloudflare.service';
+import { UsersModule } from '../users/users.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Domain, DomainAccess])],
+  imports: [TypeOrmModule.forFeature([Domain, DomainAccess]), UsersModule],
   providers: [DomainsService, CloudflareService],
   controllers: [DomainsController],
   exports: [DomainsService],

@@ -9,6 +9,9 @@
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "baseUrl": "."
+    "baseUrl": ".",
+    "paths": {
+      "@suresend/shared": ["packages/shared/src/index.ts"]
+    }
   }
 }

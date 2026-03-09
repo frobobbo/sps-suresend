@@ -1,4 +1,12 @@
-import { IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  MinLength,
+  ValidateIf,
+} from 'class-validator';
 
 export class SetCloudflareTokenDto {
   @IsString()
@@ -14,6 +22,13 @@ export class CreateDomainDto {
 }
 
 export class DelegateAccessDto {
+  @ValidateIf((dto: DelegateAccessDto) => !dto.email)
   @IsUUID()
-  userId!: string;
+  @IsOptional()
+  userId?: string;
+
+  @ValidateIf((dto: DelegateAccessDto) => !dto.userId)
+  @IsEmail()
+  @IsOptional()
+  email?: string;
 }

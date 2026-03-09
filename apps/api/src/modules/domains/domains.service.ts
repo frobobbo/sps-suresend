@@ -11,6 +11,8 @@ import { Domain } from './domain.entity';
 import { DomainAccess } from './domain-access.entity';
 import { CloudflareService } from './cloudflare.service';
 import { CreateDomainDto, DelegateAccessDto } from './domains.dto';
+import { UsersService } from '../users/users.service';
+import { SecretCipherService } from '../security/secret-cipher.service';
 
 interface RequestUser {
   id: string;
@@ -26,6 +28,8 @@ export class DomainsService {
     @InjectRepository(DomainAccess)
     private readonly accessRepo: Repository<DomainAccess>,
     private readonly cloudflareService: CloudflareService,
+    private readonly usersService: UsersService,
+    private readonly secretCipherService: SecretCipherService,
   ) {}
 
   async findAllForUser(user: RequestUser): Promise<Domain[]> {
@@ -81,12 +85,13 @@ export class DomainsService {
     if (user.role !== 'admin' && domain.ownerId !== user.id) {
       throw new ForbiddenException('Only the owner or an admin can delegate access');
     }
-    if (dto.userId === domain.ownerId) {
+    const targetUserId = await this.resolveDelegateUserId(dto);
+    if (targetUserId === domain.ownerId) {
       throw new ConflictException('Owner already has access');
     }
-    const existing = await this.accessRepo.findOneBy({ domainId: id, userId: dto.userId });
+    const existing = await this.accessRepo.findOneBy({ domainId: id, userId: targetUserId });
     if (existing) throw new ConflictException('User already has delegated access');
-    const access = this.accessRepo.create({ domainId: id, userId: dto.userId });
+    const access = this.accessRepo.create({ domainId: id, userId: targetUserId });
     return this.accessRepo.save(access);
   }
 
@@ -119,7 +124,7 @@ export class DomainsService {
     await this.domainRepo
       .createQueryBuilder()
       .update(Domain)
-      .set({ cloudflareToken: token })
+      .set({ cloudflareToken: this.secretCipherService.encrypt(token) })
       .where('id = :id', { id })
       .execute();
     return { cloudflareConnected: true };
@@ -163,7 +168,12 @@ export class DomainsService {
       throw new BadRequestException('No Cloudflare token configured for this domain');
     }
 
-    return this.cloudflareService.applyFix(domain.cloudflareToken, domain.name, check, payload);
+    return this.cloudflareService.applyFix(
+      this.secretCipherService.decryptMaybeLegacy(domain.cloudflareToken),
+      domain.name,
+      check,
+      payload,
+    );
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -196,5 +206,13 @@ export class DomainsService {
     if (domain.ownerId === user.id) return;
     const hasDelegate = domain.delegatedAccess?.some((a) => a.userId === user.id);
     if (!hasDelegate) throw new ForbiddenException('You do not have access to this domain');
+  }
+
+  private async resolveDelegateUserId(dto: DelegateAccessDto): Promise<string> {
+    if (dto.userId) return dto.userId;
+    if (!dto.email) throw new BadRequestException('userId or email is required');
+    const targetUser = await this.usersService.findByEmail(dto.email);
+    if (!targetUser) throw new NotFoundException('User not found');
+    return targetUser.id;
   }
 }

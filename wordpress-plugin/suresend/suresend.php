@@ -3,7 +3,7 @@
  * Plugin Name:  SureSend Reputation Monitor
  * Plugin URI:   https://github.com/frobobbo/sps-suresend
  * Description:  Monitors your domain's email and web reputation using the SureSend platform. Displays a full check dashboard and WP Admin widget.
- * Version:      1.3.0
+ * Version:      1.3.5
  * Author:       StrategyPlus
  * License:      GPL-2.0+
  * Text Domain:  suresend
@@ -11,7 +11,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SURESEND_VERSION',    '1.3.0' );
+define( 'SURESEND_VERSION',    '1.3.5' );
 define( 'SURESEND_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SURESEND_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 

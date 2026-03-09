@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
-import { domains as domainsApi, reputation as repApi, users as usersApi, type Domain, type ReputationCheck, type User } from '@/lib/api';
+import { domains as domainsApi, reputation as repApi, type Domain, type ReputationCheck } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,13 +16,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Plus, Trash2, X } from 'lucide-react';
@@ -42,11 +35,10 @@ export default function DomainsPage() {
   const router = useRouter();
   const [domainList, setDomainList] = useState<Domain[]>([]);
   const [latestRep, setLatestRep] = useState<Record<string, ReputationCheck | undefined>>({});
-  const [allUsers, setAllUsers] = useState<User[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [delegateOpen, setDelegateOpen] = useState<string | null>(null);
   const [newDomain, setNewDomain] = useState('');
-  const [targetUserId, setTargetUserId] = useState('');
+  const [targetEmail, setTargetEmail] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -64,8 +56,6 @@ export default function DomainsPage() {
         setLatestRep(Object.fromEntries(entries.filter(([, c]) => c !== undefined))),
       );
     });
-    // Load all users for delegation (GET /users is now open to all authenticated users)
-    usersApi.list().then(setAllUsers);
   }, [user]);
 
   async function handleAddDomain(e: React.FormEvent) {
@@ -85,12 +75,12 @@ export default function DomainsPage() {
   }
 
   async function handleDelegate(domainId: string) {
-    if (!targetUserId) return;
-    await domainsApi.delegate(domainId, targetUserId);
+    if (!targetEmail.trim()) return;
+    await domainsApi.delegate(domainId, { email: targetEmail.trim() });
     const updated = await domainsApi.list();
     setDomainList(updated);
     setDelegateOpen(null);
-    setTargetUserId('');
+    setTargetEmail('');
   }
 
   async function handleRevoke(domainId: string, userId: string) {
@@ -156,9 +146,6 @@ export default function DomainsPage() {
           </TableHeader>
           <TableBody>
             {domainList.map((d) => {
-              const grantable = allUsers.filter(
-                (u) => u.id !== d.ownerId && !d.delegatedAccess?.some((a) => a.userId === u.id),
-              );
               return (
                 <TableRow key={d.id}>
                   <TableCell>
@@ -188,11 +175,10 @@ export default function DomainsPage() {
                         </span>
                       ))}
 
-                      {/* Grant button — only shown to owner/admin when there are users to grant */}
-                      {canManage(d) && grantable.length > 0 && (
+                      {canManage(d) && (
                         <Dialog
                           open={delegateOpen === d.id}
-                          onOpenChange={(o) => { setDelegateOpen(o ? d.id : null); setTargetUserId(''); }}
+                          onOpenChange={(o) => { setDelegateOpen(o ? d.id : null); setTargetEmail(''); }}
                         >
                           <DialogTrigger asChild>
                             <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-slate-400 hover:text-slate-700">
@@ -203,15 +189,16 @@ export default function DomainsPage() {
                           <DialogContent>
                             <DialogHeader><DialogTitle>Grant access — {d.name}</DialogTitle></DialogHeader>
                             <div className="space-y-4 mt-2">
-                              <Select value={targetUserId} onValueChange={setTargetUserId}>
-                                <SelectTrigger><SelectValue placeholder="Select user" /></SelectTrigger>
-                                <SelectContent>
-                                  {grantable.map((u) => (
-                                    <SelectItem key={u.id} value={u.id}>{u.email}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <Button className="w-full" onClick={() => handleDelegate(d.id)} disabled={!targetUserId}>
+                              <div className="space-y-2">
+                                <Label>User email</Label>
+                                <Input
+                                  type="email"
+                                  placeholder="teammate@example.com"
+                                  value={targetEmail}
+                                  onChange={(e) => setTargetEmail(e.target.value)}
+                                />
+                              </div>
+                              <Button className="w-full" onClick={() => handleDelegate(d.id)} disabled={!targetEmail.trim()}>
                                 Grant access
                               </Button>
                             </div>

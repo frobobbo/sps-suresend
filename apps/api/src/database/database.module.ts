@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { join } from 'path';
 import { User } from '../modules/users/user.entity';
 import { Domain } from '../modules/domains/domain.entity';
 import { DomainAccess } from '../modules/domains/domain-access.entity';
 import { ReputationCheck } from '../modules/reputation/reputation-check.entity';
 import { AppSetting } from '../modules/settings/app-setting.entity';
+import { AuditLog } from '../modules/audit/audit-log.entity';
 
 @Module({
   imports: [
@@ -14,9 +16,10 @@ import { AppSetting } from '../modules/settings/app-setting.entity';
       useFactory: (config: ConfigService) => ({
         type: 'postgres',
         url: config.get<string>('DATABASE_URL'),
-        entities: [User, Domain, DomainAccess, ReputationCheck, AppSetting],
-        // TODO: replace with migrations before production
-        synchronize: true,
+        entities: [User, Domain, DomainAccess, ReputationCheck, AppSetting, AuditLog],
+        migrations: [join(__dirname, 'migrations/*.{ts,js}')],
+        migrationsRun: true,
+        synchronize: false,
         ssl: config.get('DATABASE_SSL') === 'true' ? { rejectUnauthorized: false } : false,
       }),
       inject: [ConfigService],

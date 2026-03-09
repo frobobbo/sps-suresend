@@ -27,7 +27,10 @@ export class UsersService {
   }
 
   findByEmail(email: string): Promise<User | null> {
-    return this.repo.findOneBy({ email });
+    return this.repo
+      .createQueryBuilder('user')
+      .where('LOWER(user.email) = LOWER(:email)', { email })
+      .getOne();
   }
 
   async create(dto: CreateUserDto): Promise<User> {
