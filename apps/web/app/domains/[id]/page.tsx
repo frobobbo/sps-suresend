@@ -774,23 +774,29 @@ export default function DomainDetailPage() {
 
   useEffect(() => {
     if (!user) return;
-    domainsApi.get(id).then(setDomain);
-    domainsApi.verification(id).then(setVerification);
-    repApi.list(id).then(setChecks);
-    repApi.latestJob(id).then(setLatestJob);
+    domainsApi.get(id).then(setDomain).catch(() => {});
+    domainsApi.verification(id).then(setVerification).catch(() => {});
+    repApi.list(id).then(setChecks).catch(() => {});
+    repApi.latestJob(id).then(setLatestJob).catch(() => {});
   }, [user, id]);
 
   useEffect(() => {
     if (!latestJob || latestJob.status === 'completed' || latestJob.status === 'failed') return;
     const timer = window.setInterval(async () => {
-      const next = await repApi.latestJob(id);
-      setLatestJob(next);
-      if (next?.status === 'completed') {
-        setChecks(await repApi.list(id));
-        setRunning(false);
-        window.clearInterval(timer);
-      } else if (next?.status === 'failed') {
-        setRunError(next.error ?? 'Scan failed');
+      try {
+        const next = await repApi.latestJob(id);
+        setLatestJob(next);
+        if (!next || next.status === 'completed') {
+          setChecks(await repApi.list(id));
+          setRunning(false);
+          window.clearInterval(timer);
+        } else if (next.status === 'failed') {
+          setRunError(next.error ?? 'Scan failed');
+          setRunning(false);
+          window.clearInterval(timer);
+        }
+      } catch (err: any) {
+        setRunError(err.message ?? 'Unable to refresh scan status');
         setRunning(false);
         window.clearInterval(timer);
       }

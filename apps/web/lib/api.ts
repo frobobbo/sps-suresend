@@ -17,12 +17,12 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...init.headers,
     },
   });
+  const raw = res.status === 204 ? '' : await res.text();
+  const body = raw ? JSON.parse(raw) : undefined;
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, body.message ?? 'Request failed');
+    throw new ApiError(res.status, (body as { message?: string } | undefined)?.message ?? 'Request failed');
   }
-  if (res.status === 204) return undefined as T;
-  return res.json();
+  return body as T;
 }
 
 export class ApiError extends Error {
