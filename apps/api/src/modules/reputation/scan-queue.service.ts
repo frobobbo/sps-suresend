@@ -70,7 +70,9 @@ export class ScanQueueService implements OnModuleInit, OnModuleDestroy {
     // On API-only pods the worker will pick up the job within its polling interval.
     // If we let the API pod process here it holds the advisory lock for the full
     // scan duration (~10-90s), blocking the dedicated worker from running anything.
-    if (this.backgroundJobsEnabled()) {
+    const enabled = this.backgroundJobsEnabled();
+    this.logger.log(`kickManualQueue called (role="${this.processRole}" enabled=${enabled})`);
+    if (enabled) {
       await this.processDueJobs();
     }
   }
