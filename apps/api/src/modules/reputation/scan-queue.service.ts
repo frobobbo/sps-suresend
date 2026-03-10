@@ -62,7 +62,13 @@ export class ScanQueueService implements OnModuleInit, OnModuleDestroy {
   }
 
   async kickManualQueue(): Promise<void> {
-    await this.processDueJobs();
+    // Only kick when this process runs the worker role.
+    // On API-only pods the worker will pick up the job within its polling interval.
+    // If we let the API pod process here it holds the advisory lock for the full
+    // scan duration (~10-90s), blocking the dedicated worker from running anything.
+    if (this.backgroundJobsEnabled()) {
+      await this.processDueJobs();
+    }
   }
 
   async enqueueManual(domainId: string, requestedByUserId: string): Promise<ScanJob> {
