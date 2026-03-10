@@ -71,7 +71,6 @@ export class ScanQueueService implements OnModuleInit, OnModuleDestroy {
     // If we let the API pod process here it holds the advisory lock for the full
     // scan duration (~10-90s), blocking the dedicated worker from running anything.
     const enabled = this.backgroundJobsEnabled();
-    this.logger.log(`kickManualQueue called (role="${this.processRole}" enabled=${enabled})`);
     if (enabled) {
       await this.processDueJobs();
     }
@@ -206,11 +205,8 @@ export class ScanQueueService implements OnModuleInit, OnModuleDestroy {
       )
       RETURNING "id"
     `);
-    // Diagnostic: always log the raw result so we can detect TypeORM return-format surprises
-    this.logger.debug(`claimNextJobId raw: ${JSON.stringify(rows).slice(0, 200)}`);
-    // rows may be an array OR (in some TypeORM/pg versions) an object with a .rows property
-    const id: string | null = rows[0]?.id ?? (rows as any)?.rows?.[0]?.id ?? null;
-    return id;
+    // dataSource.query() returns [resultRows, rowCount] for raw SQL — rows[0] is the result array
+    return rows[0]?.[0]?.id ?? null;
   }
 
   private async runJob(jobId: string): Promise<void> {
