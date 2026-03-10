@@ -155,6 +155,7 @@ export class ScanQueueService implements OnModuleInit, OnModuleDestroy {
       await this.withAdvisoryLock(ScanQueueService.WORKER_LOCK_ID, async () => {
         while (true) {
           const jobId = await this.claimNextJobId();
+          this.logger.debug(`claimNextJobId → ${jobId ?? 'none'}`);
           if (!jobId) break;
           await this.runJob(jobId);
         }
@@ -279,7 +280,10 @@ export class ScanQueueService implements OnModuleInit, OnModuleDestroy {
     await qr.connect();
     try {
       const rows = await qr.query('SELECT pg_try_advisory_lock($1) AS locked', [lockId]);
-      if (!rows[0]?.locked) return;
+      if (!rows[0]?.locked) {
+        this.logger.debug(`Advisory lock ${lockId} not acquired (held by another process)`);
+        return;
+      }
       try {
         await fn();
       } finally {
