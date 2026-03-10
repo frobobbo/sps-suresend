@@ -181,47 +181,51 @@ export class ScanQueueService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async runJob(jobId: string): Promise<void> {
+    // The timeout covers the ENTIRE job execution, not just runCheck.
+    // Without this, any hanging DB operation before runCheck would leave the job stuck forever.
     try {
-      const job = await this.jobRepo.findOneByOrFail({ id: jobId });
-      const domain = await this.domainRepo.findOne({
-        where: { id: job.domainId },
-        relations: ['owner'],
-      });
-      if (!domain) {
-        await this.failJob(jobId, 'Domain not found');
-        return;
-      }
-      if (!domain.verifiedAt) {
-        await this.failJob(jobId, 'Domain ownership has not been verified');
-        return;
-      }
-
-      const previous = await this.checkRepo.findOne({
-        where: { domainId: domain.id },
-        order: { checkedAt: 'DESC' },
-      });
-
-      const check = await Promise.race([
-        this.reputationService.runCheck(domain.id, domain.name),
-        new Promise<ReputationCheck>((_, reject) =>
+      await Promise.race([
+        this.executeJob(jobId),
+        new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('Scan timed out')), ScanQueueService.JOB_TIMEOUT_MS),
         ),
       ]);
-      await this.jobRepo.update(
-        { id: jobId },
-        {
-          status: 'completed',
-          finishedAt: new Date(),
-          resultCheckId: check.id,
-        },
-      );
-
-      if (job.trigger === 'scheduled' && domain.alertsEnabled) {
-        await this.maybeSendScheduledAlert(domain.owner, domain, check, previous);
-      }
     } catch (error) {
       await this.failJob(jobId, error instanceof Error ? error.message : 'Unknown scan failure');
     }
+  }
+
+  private async executeJob(jobId: string): Promise<void> {
+    this.logger.log(`[job:${jobId}] fetching job record`);
+    const job = await this.jobRepo.findOneByOrFail({ id: jobId });
+
+    this.logger.log(`[job:${jobId}] fetching domain ${job.domainId}`);
+    const domain = await this.domainRepo.findOne({
+      where: { id: job.domainId },
+      relations: ['owner'],
+    });
+    if (!domain) throw new Error('Domain not found');
+    if (!domain.verifiedAt) throw new Error('Domain ownership has not been verified');
+
+    this.logger.log(`[job:${jobId}] fetching previous check`);
+    const previous = await this.checkRepo.findOne({
+      where: { domainId: domain.id },
+      order: { checkedAt: 'DESC' },
+    });
+
+    this.logger.log(`[job:${jobId}] running reputation check for ${domain.name}`);
+    const check = await this.reputationService.runCheck(domain.id, domain.name);
+
+    this.logger.log(`[job:${jobId}] marking completed`);
+    await this.jobRepo.update(
+      { id: jobId },
+      { status: 'completed', finishedAt: new Date(), resultCheckId: check.id },
+    );
+
+    if (job.trigger === 'scheduled' && domain.alertsEnabled) {
+      await this.maybeSendScheduledAlert(domain.owner, domain, check, previous);
+    }
+    this.logger.log(`[job:${jobId}] done`);
   }
 
   private async maybeSendScheduledAlert(
