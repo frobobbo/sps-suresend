@@ -13,6 +13,7 @@ import { ReputationCheck } from './reputation-check.entity';
 export class ScanQueueService implements OnModuleInit, OnModuleDestroy {
   private static readonly WORKER_LOCK_ID = 7_310_001;
   private static readonly SCHEDULER_LOCK_ID = 7_310_002;
+  private static readonly JOB_TIMEOUT_MS = 90_000; // 90 seconds hard limit per job
   private readonly logger = new Logger(ScanQueueService.name);
   private workerTimer?: NodeJS.Timeout;
   private schedulerTimer?: NodeJS.Timeout;
@@ -33,7 +34,16 @@ export class ScanQueueService implements OnModuleInit, OnModuleDestroy {
     private readonly mailService: MailService,
   ) {}
 
-  onModuleInit(): void {
+  async onModuleInit(): Promise<void> {
+    // Recover any jobs left in 'running' state from a previous process crash/restart
+    const recovered = await this.jobRepo.update(
+      { status: 'running' },
+      { status: 'failed', finishedAt: new Date(), error: 'Scan interrupted (process restart)' },
+    );
+    if (recovered.affected && recovered.affected > 0) {
+      this.logger.warn(`Recovered ${recovered.affected} stuck running scan job(s) from previous process`);
+    }
+
     if (!this.backgroundJobsEnabled()) {
       this.logger.log(`Background scan queue disabled for process role "${this.processRole}"`);
       return;
@@ -189,7 +199,12 @@ export class ScanQueueService implements OnModuleInit, OnModuleDestroy {
         order: { checkedAt: 'DESC' },
       });
 
-      const check = await this.reputationService.runCheck(domain.id, domain.name);
+      const check = await Promise.race([
+        this.reputationService.runCheck(domain.id, domain.name),
+        new Promise<ReputationCheck>((_, reject) =>
+          setTimeout(() => reject(new Error('Scan timed out')), ScanQueueService.JOB_TIMEOUT_MS),
+        ),
+      ]);
       await this.jobRepo.update(
         { id: jobId },
         {
