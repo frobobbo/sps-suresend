@@ -25,7 +25,15 @@ async function handler(req: Request): Promise<Response> {
     init.duplex = 'half';
   }
 
-  const upstream = await fetch(target, init);
+  let upstream: Response;
+  try {
+    upstream = await fetch(target, init);
+  } catch {
+    return new Response(JSON.stringify({ message: 'API service unavailable' }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
   const resHeaders = new Headers(upstream.headers);
   // Remove hop-by-hop headers that should not be forwarded

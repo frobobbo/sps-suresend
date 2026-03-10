@@ -22,6 +22,8 @@ import { AuditLog } from '../modules/audit/audit-log.entity';
         migrationsRun: true,
         synchronize: false,
         ssl: config.get('DATABASE_SSL') === 'true' ? { rejectUnauthorized: false } : false,
+        // Fail fast if pool is exhausted rather than hanging indefinitely
+        extra: { connectionTimeoutMillis: 10_000 },
       }),
       inject: [ConfigService],
     }),

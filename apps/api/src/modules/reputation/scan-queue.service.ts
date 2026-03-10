@@ -134,7 +134,9 @@ export class ScanQueueService implements OnModuleInit, OnModuleDestroy {
           }));
           await this.domainsService.markScheduledScanQueued(domain.id, now);
         } catch (error) {
-          if (!this.isActiveJobConflict(error)) throw error;
+          if (!this.isActiveJobConflict(error)) {
+            this.logger.error(`Failed to enqueue scheduled scan for domain ${domain.id}: ${String(error)}`);
+          }
         }
       }
     });

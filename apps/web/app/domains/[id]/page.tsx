@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
-import { domains as domainsApi, reputation as repApi, type Domain, type ReputationCheck, type ScanJob } from '@/lib/api';
+import { ApiError, domains as domainsApi, reputation as repApi, type Domain, type ReputationCheck, type ScanJob } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -783,9 +783,11 @@ export default function DomainDetailPage() {
 
   useEffect(() => {
     if (!latestJob || latestJob.status === 'completed' || latestJob.status === 'failed') return;
+    let consecutiveErrors = 0;
     const timer = window.setInterval(async () => {
       try {
         const next = await repApi.latestJob(id);
+        consecutiveErrors = 0;
         setLatestJob(next);
         if (!next || next.status === 'completed') {
           setChecks(await repApi.list(id));
@@ -797,6 +799,9 @@ export default function DomainDetailPage() {
           window.clearInterval(timer);
         }
       } catch (err: any) {
+        // Retry through transient backend errors (503, network blip during deploys, etc.)
+        const isTransient = err instanceof ApiError && err.status === 503;
+        if (isTransient || ++consecutiveErrors < 5) return;
         setRunError(err.message ?? 'Unable to refresh scan status');
         setRunning(false);
         window.clearInterval(timer);
