@@ -169,26 +169,26 @@ export class ScanQueueService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async runJob(jobId: string): Promise<void> {
-    const job = await this.jobRepo.findOneByOrFail({ id: jobId });
-    const domain = await this.domainRepo.findOne({
-      where: { id: job.domainId },
-      relations: ['owner'],
-    });
-    if (!domain) {
-      await this.failJob(jobId, 'Domain not found');
-      return;
-    }
-    if (!domain.verifiedAt) {
-      await this.failJob(jobId, 'Domain ownership has not been verified');
-      return;
-    }
-
-    const previous = await this.checkRepo.findOne({
-      where: { domainId: domain.id },
-      order: { checkedAt: 'DESC' },
-    });
-
     try {
+      const job = await this.jobRepo.findOneByOrFail({ id: jobId });
+      const domain = await this.domainRepo.findOne({
+        where: { id: job.domainId },
+        relations: ['owner'],
+      });
+      if (!domain) {
+        await this.failJob(jobId, 'Domain not found');
+        return;
+      }
+      if (!domain.verifiedAt) {
+        await this.failJob(jobId, 'Domain ownership has not been verified');
+        return;
+      }
+
+      const previous = await this.checkRepo.findOne({
+        where: { domainId: domain.id },
+        order: { checkedAt: 'DESC' },
+      });
+
       const check = await this.reputationService.runCheck(domain.id, domain.name);
       await this.jobRepo.update(
         { id: jobId },
@@ -248,13 +248,18 @@ export class ScanQueueService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async withAdvisoryLock(lockId: number, fn: () => Promise<void>): Promise<void> {
-    const rows = await this.dataSource.query('SELECT pg_try_advisory_lock($1) AS locked', [lockId]);
-    if (!rows[0]?.locked) return;
-
+    const qr = this.dataSource.createQueryRunner();
+    await qr.connect();
     try {
-      await fn();
+      const rows = await qr.query('SELECT pg_try_advisory_lock($1) AS locked', [lockId]);
+      if (!rows[0]?.locked) return;
+      try {
+        await fn();
+      } finally {
+        await qr.query('SELECT pg_advisory_unlock($1)', [lockId]);
+      }
     } finally {
-      await this.dataSource.query('SELECT pg_advisory_unlock($1)', [lockId]);
+      await qr.release();
     }
   }
 
