@@ -206,7 +206,11 @@ export class ScanQueueService implements OnModuleInit, OnModuleDestroy {
       )
       RETURNING "id"
     `);
-    return rows[0]?.id ?? null;
+    // Diagnostic: always log the raw result so we can detect TypeORM return-format surprises
+    this.logger.debug(`claimNextJobId raw: ${JSON.stringify(rows).slice(0, 200)}`);
+    // rows may be an array OR (in some TypeORM/pg versions) an object with a .rows property
+    const id: string | null = rows[0]?.id ?? (rows as any)?.rows?.[0]?.id ?? null;
+    return id;
   }
 
   private async runJob(jobId: string): Promise<void> {
