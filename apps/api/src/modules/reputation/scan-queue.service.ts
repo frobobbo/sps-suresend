@@ -17,6 +17,7 @@ export class ScanQueueService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ScanQueueService.name);
   private workerTimer?: NodeJS.Timeout;
   private schedulerTimer?: NodeJS.Timeout;
+  private recoveryTimer?: NodeJS.Timeout;
   private processing = false;
   private readonly processRole = (process.env.SURESEND_PROCESS_ROLE ?? 'all').toLowerCase();
 
@@ -51,6 +52,8 @@ export class ScanQueueService implements OnModuleInit, OnModuleDestroy {
 
     this.workerTimer = setInterval(() => void this.processDueJobs(), 5000);
     this.schedulerTimer = setInterval(() => void this.enqueueScheduledScans(), 60000);
+    // Periodically recover jobs orphaned by a pod restart that raced with job creation
+    this.recoveryTimer = setInterval(() => void this.recoverStuckJobs(), 120_000);
     void this.processDueJobs();
     void this.enqueueScheduledScans();
     this.logger.log(`Background scan queue enabled for process role "${this.processRole}"`);
@@ -59,6 +62,7 @@ export class ScanQueueService implements OnModuleInit, OnModuleDestroy {
   onModuleDestroy(): void {
     if (this.workerTimer) clearInterval(this.workerTimer);
     if (this.schedulerTimer) clearInterval(this.schedulerTimer);
+    if (this.recoveryTimer) clearInterval(this.recoveryTimer);
   }
 
   async kickManualQueue(): Promise<void> {
@@ -146,6 +150,22 @@ export class ScanQueueService implements OnModuleInit, OnModuleDestroy {
         }
       }
     });
+  }
+
+  private async recoverStuckJobs(): Promise<void> {
+    // Fail any job that has been 'running' longer than twice the hard timeout.
+    // This handles the rolling-deployment race where a pod is killed mid-scan and
+    // onModuleInit recovery never saw the job (it was created after the new pod started).
+    const cutoff = new Date(Date.now() - ScanQueueService.JOB_TIMEOUT_MS * 2);
+    const result = await this.jobRepo
+      .createQueryBuilder()
+      .update()
+      .set({ status: 'failed', finishedAt: new Date(), error: 'Scan interrupted (orphaned by pod restart)' })
+      .where('"status" = :status AND "startedAt" < :cutoff', { status: 'running', cutoff })
+      .execute();
+    if (result.affected && result.affected > 0) {
+      this.logger.warn(`Periodic recovery: failed ${result.affected} orphaned running job(s)`);
+    }
   }
 
   private async processDueJobs(): Promise<void> {
