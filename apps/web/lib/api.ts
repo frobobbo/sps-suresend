@@ -57,12 +57,6 @@ export const auth = {
 export const users = {
   list: () => apiFetch<User[]>('/users'),
 
-  lookup: (email: string) =>
-    apiFetch<User | null>('/users/lookup', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    }),
-
   create: (email: string, password: string, role: 'admin' | 'user') =>
     apiFetch<User>('/users', {
       method: 'POST',

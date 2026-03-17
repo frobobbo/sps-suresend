@@ -1,18 +1,15 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 
 const ENCRYPTED_PREFIX = 'enc:v1';
 
 @Injectable()
 export class SecretCipherService {
-  private readonly logger = new Logger(SecretCipherService.name);
   private readonly key = createHash('sha256')
-    .update(process.env.SECRETS_ENCRYPTION_KEY ?? process.env.JWT_SECRET ?? 'replace-me')
+    .update(process.env.SECRETS_ENCRYPTION_KEY!)
     .digest();
-  private warned = false;
 
   encrypt(value: string): string {
-    this.warnIfFallback();
     const iv = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', this.key, iv);
     const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
@@ -36,11 +33,4 @@ export class SecretCipherService {
     return decrypted.toString('utf8');
   }
 
-  private warnIfFallback(): void {
-    if (this.warned) return;
-    if (!process.env.SECRETS_ENCRYPTION_KEY && !process.env.JWT_SECRET) {
-      this.logger.warn('Using fallback encryption key; set SECRETS_ENCRYPTION_KEY in production');
-    }
-    this.warned = true;
-  }
 }
