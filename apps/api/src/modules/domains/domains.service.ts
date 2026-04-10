@@ -3,18 +3,26 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
-import { promises as dnsPromises } from 'dns';
+import { Resolver } from 'dns';
+import { promisify } from 'util';
 import { Domain } from './domain.entity';
 import { DomainAccess } from './domain-access.entity';
 import { CloudflareService } from './cloudflare.service';
 import { CreateDomainDto, DelegateAccessDto, UpdateMonitoringDto } from './domains.dto';
 import { UsersService } from '../users/users.service';
 import { SecretCipherService } from '../security/secret-cipher.service';
+
+// Use public DNS resolvers instead of the system/container resolver, which is
+// unreliable for external TXT lookups in Docker/Kubernetes environments.
+const dnsResolver = new Resolver();
+dnsResolver.setServers(['1.1.1.1', '8.8.8.8']);
+const resolveTxt = promisify(dnsResolver.resolveTxt.bind(dnsResolver));
 
 interface RequestUser {
   id: string;
@@ -24,6 +32,8 @@ interface RequestUser {
 
 @Injectable()
 export class DomainsService {
+  private readonly logger = new Logger(DomainsService.name);
+
   constructor(
     @InjectRepository(Domain)
     private readonly domainRepo: Repository<Domain>,
@@ -211,11 +221,13 @@ export class DomainsService {
 
     const host = `_suresend-verification.${domain.name}`;
     try {
-      const records = await dnsPromises.resolveTxt(host);
+      const records = await resolveTxt(host);
       const flat = records.map((r) => r.join(''));
+      this.logger.debug(`TXT lookup ${host}: [${flat.join(', ')}] expected=${domain.verificationToken}`);
       const found = flat.includes(domain.verificationToken);
       if (!found) return { verified: false, verifiedAt: null };
-    } catch {
+    } catch (err: any) {
+      this.logger.warn(`TXT lookup failed for ${host}: ${err?.code} ${err?.message}`);
       return { verified: false, verifiedAt: null };
     }
 
