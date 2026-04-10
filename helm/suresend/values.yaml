@@ -34,7 +34,8 @@ api:
   # Sensitive values — set via --set or a values override file, never commit real values.
   # databaseUrl is ignored when postgresql.enabled is true (auto-constructed from subchart).
   secrets:
-    jwtSecret: "replace-me"
+    jwtSecret: ""
+    secretsEncryptionKey: ""
     databaseUrl: ""
     redisUrl: "redis://redis:6379"
     stripeSecretKey: "sk_test_replace"
